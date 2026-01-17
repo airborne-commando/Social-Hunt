@@ -1,16 +1,10 @@
 <h2>Reverse Image</h2>
-<p class="muted">Generate one-click links to common reverse-image search engines (Google Images, Lens, TinEye, Bing, Yandex).</p>
+<p class="muted">Generate one-click links to external reverse-image engines (Google Images / Lens / TinEye / Bing / Yandex).</p>
 
 <div class="card">
   <div class="row">
-    <label class="muted tiny" style="min-width:80px;">Image URL</label>
-    <input id="reverseUrl" class="input" placeholder="https://.../image.jpg" />
+    <input id="imageUrl" placeholder="https://example.com/image.jpg" />
+    <button class="btn good" id="reverseGo" type="button">Generate</button>
   </div>
-
-  <div class="row" style="margin-top:10px;">
-    <button id="reverseBtn" class="btn">Generate Search Links</button>
-    <span id="reverseStatus" class="muted"></span>
-  </div>
-
-  <div id="reverseResults" style="margin-top:12px;"></div>
+  <div id="reverseOut" style="margin-top:12px; display:grid; gap:8px"></div>
 </div>

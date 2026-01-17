@@ -1,13 +1,12 @@
 <h2>Token</h2>
-<p class="muted">Stored locally in your browser and used for privileged actions (plugin upload/reload). It is sent as the <code>X-Plugin-Token</code> header.</p>
+<p class="muted">Set your admin token (stored only in your browser). This is used for Settings + Plugin uploads.</p>
 
 <div class="card">
-  <label class="muted tiny">Admin Token</label>
-  <input id="tokenInput" class="input" type="password" placeholder="Paste your admin token" />
-
-  <div class="row" style="margin-top:10px;">
-    <button id="tokenSave" class="btn">Save</button>
-    <button id="tokenClear" class="btn danger">Clear</button>
-    <span class="muted" id="tokenSavedMsg"></span>
+  <div class="row">
+    <input id="tokenInput" type="password" placeholder="Enter admin token" />
+  </div>
+  <div class="row" style="margin-top:10px">
+    <button id="tokenSave" class="btn good" type="button">Save</button>
+    <button id="tokenClear" class="btn danger" type="button">Clear</button>
   </div>
 </div>

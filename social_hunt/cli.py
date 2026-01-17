@@ -8,7 +8,6 @@ from .banner import print_banner
 from .engine import SocialHuntEngine
 from .export import export_results
 from .registry import build_registry
-from .addons_registry import build_addon_registry, load_enabled_addons
 from .types import ResultStatus
 
 
@@ -30,14 +29,7 @@ def main() -> None:
     )
 
     registry = build_registry("providers.yaml")
-    addons_registry = build_addon_registry()
-    enabled_addons = load_enabled_addons("addons.yaml")
-    engine = SocialHuntEngine(
-        registry,
-        addons=addons_registry,
-        enabled_addons=enabled_addons,
-        max_concurrency=args.max_concurrency,
-    )
+    engine = SocialHuntEngine(registry, max_concurrency=args.max_concurrency)
 
     print(f"\nSearching for username: {args.username}")
     print("=" * 60)
