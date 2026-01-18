@@ -162,7 +162,21 @@ function renderResults(job) {
     const following = (prof.following ?? "");
     const created = (prof.created_at ?? "");
     const link = r.url ? `<a href="${r.url}" target="_blank" rel="noreferrer">${r.url}</a>` : "";
-    const err = r.error ? `<div class="muted">${r.error}</div>` : "";
+    const err = r.error ? `<div class="muted">${escapeHtml(r.error)}</div>` : "";
+
+    // Provider-specific quick notes (e.g. HIBP)
+    const notes = [];
+    if (typeof prof.breach_count === 'number') {
+      notes.push(`breaches: ${prof.breach_count}`);
+      if (Array.isArray(prof.breaches) && prof.breaches.length) {
+        notes.push(`(${prof.breaches.slice(0, 6).join(', ')}${prof.breaches.length > 6 ? '…' : ''})`);
+      }
+    }
+    if (typeof prof.paste_count === 'number') notes.push(`pastes: ${prof.paste_count}`);
+    if (prof.note) notes.push(String(prof.note));
+    if (prof.pastes_note) notes.push(String(prof.pastes_note));
+    if (prof.pastes_error) notes.push(`pastes: ${prof.pastes_error}`);
+    const noteHtml = notes.length ? `<div class="muted" style="margin-top:6px">${escapeHtml(notes.join(' '))}</div>` : "";
     return `
       <tr>
         <td>${r.provider}</td>
@@ -172,7 +186,7 @@ function renderResults(job) {
         <td>${followers}</td>
         <td>${following}</td>
         <td>${created}</td>
-        <td>${link}${err}</td>
+        <td>${link}${noteHtml}${err}</td>
         <td>${r.http_status ?? ""}</td>
         <td>${r.elapsed_ms ?? ""}</td>
       </tr>
@@ -406,9 +420,56 @@ function initTokensView() {
   const save = document.getElementById('tokenSave');
   const clear = document.getElementById('tokenClear');
 
+  const statusEl = document.getElementById('adminStatus');
+  const serverTokenInput = document.getElementById('serverTokenInput');
+  const bootstrapSecretInput = document.getElementById('bootstrapSecretInput');
+  const serverTokenSet = document.getElementById('serverTokenSet');
+
   input.value = getToken() || '';
   save.onclick = () => setToken(input.value.trim());
   clear.onclick = () => { input.value = ''; setToken(''); };
+
+  async function loadStatus() {
+    try {
+      const r = await fetch('/api/admin/status', { cache: 'no-store' });
+      const j = await r.json().catch(() => ({}));
+      if (statusEl) statusEl.textContent = JSON.stringify(j, null, 2);
+
+      // If bootstrap secret is not required, hide the field to reduce confusion
+      if (bootstrapSecretInput && !j.bootstrap_secret_required) {
+        bootstrapSecretInput.style.display = 'none';
+      }
+    } catch (e) {
+      if (statusEl) statusEl.textContent = 'Failed to load status.';
+    }
+  }
+
+  if (serverTokenSet) {
+    serverTokenSet.onclick = async () => {
+      const newTok = (serverTokenInput?.value || '').trim();
+      if (!newTok) return alert('Enter a new server admin token.');
+
+      const headers = authHeaders({ 'Content-Type': 'application/json' });
+      const boot = (bootstrapSecretInput?.value || '').trim();
+      if (boot) headers['X-Bootstrap-Secret'] = boot;
+
+      const r = await fetch('/api/admin/token', {
+        method: 'PUT',
+        headers,
+        body: JSON.stringify({ token: newTok })
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
+
+      // Store locally too so the next privileged request works
+      setToken(newTok);
+      input.value = newTok;
+      alert('Server token set.');
+      await loadStatus();
+    };
+  }
+
+  loadStatus();
 }
 
 // ----------------------
