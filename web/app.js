@@ -3,7 +3,9 @@ const viewTitle = document.getElementById("viewTitle");
 const tokenStatus = document.getElementById("tokenStatus");
 
 // ---- token helpers ----
-function getToken() { return localStorage.getItem("socialhunt_token"); }
+function getToken() {
+  return localStorage.getItem("socialhunt_token");
+}
 function setToken(token) {
   if (!token) localStorage.removeItem("socialhunt_token");
   else localStorage.setItem("socialhunt_token", token);
@@ -28,30 +30,32 @@ const viewTitles = {
 };
 
 async function loadView(name) {
-  document.querySelectorAll('.menu-btn[data-view]').forEach(b => {
-    b.classList.toggle('active', b.dataset.view === name);
+  document.querySelectorAll(".menu-btn[data-view]").forEach((b) => {
+    b.classList.toggle("active", b.dataset.view === name);
   });
 
   viewTitle.textContent = viewTitles[name] || name;
 
-  const res = await fetch(`/static/views/${name}.html?v=layout2`, { cache: 'no-store' });
+  const res = await fetch(`/static/views/${name}.html?v=layout2`, {
+    cache: "no-store",
+  });
   viewContainer.innerHTML = await res.text();
 
-  if (name === 'dashboard') initDashboardView();
-  if (name === 'search') initSearchView();
-  if (name === 'reverse') initReverseView();
-  if (name === 'history') initHistoryView();
-  if (name === 'plugins') initPluginsView();
-  if (name === 'tokens') initTokensView();
-  if (name === 'settings') initSettingsView();
+  if (name === "dashboard") initDashboardView();
+  if (name === "search") initSearchView();
+  if (name === "reverse") initReverseView();
+  if (name === "history") initHistoryView();
+  if (name === "plugins") initPluginsView();
+  if (name === "tokens") initTokensView();
+  if (name === "settings") initSettingsView();
 }
 
 // ----------------------
 // Local history (browser only)
 // ----------------------
 const HISTORY_MAX = 200;
-const KEY_SEARCH_HISTORY = 'socialhunt_search_history';
-const KEY_REVERSE_HISTORY = 'socialhunt_reverse_history';
+const KEY_SEARCH_HISTORY = "socialhunt_search_history";
+const KEY_REVERSE_HISTORY = "socialhunt_reverse_history";
 
 function loadJsonArray(key) {
   try {
@@ -76,14 +80,14 @@ function addSearchHistoryEntry({ username, providers, job_id }) {
     providers_count: (providers || []).length,
     job_id,
     results_count: null,
-    state: 'running'
+    state: "running",
   });
   saveJsonArray(KEY_SEARCH_HISTORY, items);
 }
 
 function markSearchHistory(job_id, patch) {
   const items = loadJsonArray(KEY_SEARCH_HISTORY);
-  const idx = items.findIndex(x => x && x.job_id === job_id);
+  const idx = items.findIndex((x) => x && x.job_id === job_id);
   if (idx >= 0) {
     items[idx] = { ...items[idx], ...patch };
     saveJsonArray(KEY_SEARCH_HISTORY, items);
@@ -95,7 +99,7 @@ function addReverseHistoryEntry({ image_url, links }) {
   items.unshift({
     ts: Date.now(),
     image_url,
-    links: Array.isArray(links) ? links : []
+    links: Array.isArray(links) ? links : [],
   });
   saveJsonArray(KEY_REVERSE_HISTORY, items);
 }
@@ -104,12 +108,12 @@ function addReverseHistoryEntry({ image_url, links }) {
 // Dashboard
 // ----------------------
 function initDashboardView() {
-  const last = localStorage.getItem('socialhunt_last_job') || '';
-  const el = document.getElementById('lastJob');
-  if (el) el.textContent = last ? last : '(none yet)';
+  const last = localStorage.getItem("socialhunt_last_job") || "";
+  const el = document.getElementById("lastJob");
+  if (el) el.textContent = last ? last : "(none yet)";
 
-  const go = document.getElementById('goSearch');
-  if (go) go.onclick = () => loadView('search');
+  const go = document.getElementById("goSearch");
+  if (go) go.onclick = () => loadView("search");
 }
 
 // ----------------------
@@ -120,14 +124,14 @@ function badge(status) {
 }
 
 async function fetchProviders() {
-  const res = await fetch('/api/providers');
+  const res = await fetch("/api/providers");
   const data = await res.json();
   return data.providers || [];
 }
 
 async function fetchWhoami() {
   try {
-    const res = await fetch('/api/whoami');
+    const res = await fetch("/api/whoami");
     const data = await res.json();
     return data;
   } catch (_) {
@@ -136,48 +140,79 @@ async function fetchWhoami() {
 }
 
 function renderProviders(names) {
-  const box = document.getElementById('providers');
-  box.innerHTML = names.map(n => `
+  const box = document.getElementById("providers");
+  box.innerHTML = names
+    .map(
+      (n) => `
     <label class="provider">
       <input type="checkbox" data-name="${n}" checked />
       <span>${n}</span>
     </label>
-  `).join('');
+  `,
+    )
+    .join("");
 }
 
 function selectedProviders() {
-  return Array.from(document.querySelectorAll('input[type="checkbox"][data-name]'))
-    .filter(x => x.checked)
-    .map(x => x.getAttribute('data-name'));
+  return Array.from(
+    document.querySelectorAll('input[type="checkbox"][data-name]'),
+  )
+    .filter((x) => x.checked)
+    .map((x) => x.getAttribute("data-name"));
 }
 
 function renderResults(job) {
   const results = job.results || [];
 
-  const rows = results.map(r => {
-    const prof = r.profile || {};
-    const avatar = prof.avatar_url ? `<img src="${prof.avatar_url}" alt="" class="avatar"/>` : "";
-    const name = prof.display_name ? `${prof.display_name}` : "";
-    const followers = (prof.followers ?? prof.subscribers ?? "");
-    const following = (prof.following ?? "");
-    const created = (prof.created_at ?? "");
-    const link = r.url ? `<a href="${r.url}" target="_blank" rel="noreferrer">${r.url}</a>` : "";
-    const err = r.error ? `<div class="muted">${escapeHtml(r.error)}</div>` : "";
+  const rows = results
+    .map((r) => {
+      const prof = r.profile || {};
+      const avatar =
+        prof.avatar_url && prof.avatar_url !== "undefined"
+          ? `<img src="${prof.avatar_url}" alt="" class="avatar"/>`
+          : "";
+      const name = prof.display_name ? `${prof.display_name}` : "";
+      const followers = prof.followers ?? prof.subscribers ?? "";
+      const following = prof.following ?? "";
+      const created = prof.created_at ?? "";
+      const link = r.url
+        ? `<a href="${r.url}" target="_blank" rel="noreferrer">${r.url}</a>`
+        : "";
+      const err = r.error
+        ? `<div class="muted">${escapeHtml(r.error)}</div>`
+        : "";
 
-    // Provider-specific quick notes (e.g. HIBP)
-    const notes = [];
-    if (typeof prof.breach_count === 'number') {
-      notes.push(`breaches: ${prof.breach_count}`);
-      if (Array.isArray(prof.breaches) && prof.breaches.length) {
-        notes.push(`(${prof.breaches.slice(0, 6).join(', ')}${prof.breaches.length > 6 ? '…' : ''})`);
+      // Provider-specific quick notes (e.g. HIBP)
+      const notes = [];
+      if (typeof prof.breach_count === "number") {
+        notes.push(`breaches: ${prof.breach_count}`);
+        if (Array.isArray(prof.breaches) && prof.breaches.length) {
+          notes.push(
+            `(${prof.breaches.slice(0, 6).join(", ")}${prof.breaches.length > 6 ? "…" : ""})`,
+          );
+        }
       }
-    }
-    if (typeof prof.paste_count === 'number') notes.push(`pastes: ${prof.paste_count}`);
-    if (prof.note) notes.push(String(prof.note));
-    if (prof.pastes_note) notes.push(String(prof.pastes_note));
-    if (prof.pastes_error) notes.push(`pastes: ${prof.pastes_error}`);
-    const noteHtml = notes.length ? `<div class="muted" style="margin-top:6px">${escapeHtml(notes.join(' '))}</div>` : "";
-    return `
+      if (typeof prof.paste_count === "number")
+        notes.push(`pastes: ${prof.paste_count}`);
+      if (prof.note) notes.push(String(prof.note));
+      if (prof.pastes_note) notes.push(String(prof.pastes_note));
+      if (prof.pastes_error) notes.push(`pastes: ${prof.pastes_error}`);
+      if (prof.face_match) {
+        if (prof.face_match.match) {
+          notes.push("FACE MATCH");
+        } else {
+          notes.push(
+            `NO FACE MATCH (reason: ${prof.face_match.reason || "unknown"})`,
+          );
+        }
+      }
+      if (prof.face_match_error) {
+        notes.push(`FACE SEARCH ERROR: ${prof.face_match_error}`);
+      }
+      const noteHtml = notes.length
+        ? `<div class="muted" style="margin-top:6px">${escapeHtml(notes.join(" "))}</div>`
+        : "";
+      return `
       <tr>
         <td>${r.provider}</td>
         <td>${badge(r.status)}</td>
@@ -191,9 +226,10 @@ function renderResults(job) {
         <td>${r.elapsed_ms ?? ""}</td>
       </tr>
     `;
-  }).join('');
+    })
+    .join("");
 
-  document.getElementById('results').innerHTML = `
+  document.getElementById("results").innerHTML = `
     <div class="tablewrap">
       <table>
         <thead>
@@ -217,49 +253,82 @@ function renderResults(job) {
 }
 
 async function startScan() {
-  const usernameEl = document.getElementById('username');
-  const statusEl = document.getElementById('status');
-  const username = (usernameEl?.value || '').trim();
+  const usernameEl = document.getElementById("username");
+  const statusEl = document.getElementById("status");
+  const enableFaceSearchEl = document.getElementById("enableFaceSearch");
+  const faceImagesEl = document.getElementById("faceImages");
+
+  const username = (usernameEl?.value || "").trim();
   if (!username) {
-    statusEl.textContent = 'Enter a username.';
+    statusEl.textContent = "Enter a username.";
     return;
   }
 
-  const providers = selectedProviders();
-  statusEl.textContent = 'Starting scan...';
+  const useFaceSearch = enableFaceSearchEl?.checked;
+  const faceImages = faceImagesEl?.files || [];
 
-  const res = await fetch('/api/search', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, providers })
-  });
+  let res;
+  if (useFaceSearch) {
+    if (faceImages.length === 0) {
+      statusEl.textContent = "Select at least one image file for face search.";
+      return;
+    }
+    statusEl.textContent = "Starting face scan...";
+    const formData = new FormData();
+    formData.append("username", username);
+    for (const file of faceImages) {
+      formData.append("files", file);
+    }
+    res = await fetch("/api/face-search", {
+      method: "POST",
+      body: formData,
+    });
+  } else {
+    const providers = selectedProviders();
+    statusEl.textContent = "Starting scan...";
+    res = await fetch("/api/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, providers }),
+    });
+  }
 
   const data = await res.json().catch(() => ({}));
   const jobId = data.job_id;
   if (!jobId) {
-    statusEl.textContent = 'Failed to start.';
+    statusEl.textContent = "Failed to start.";
     return;
   }
 
-  localStorage.setItem('socialhunt_last_job', jobId);
-  addSearchHistoryEntry({ username, providers, job_id: jobId });
+  localStorage.setItem("socialhunt_last_job", jobId);
+  addSearchHistoryEntry({
+    username,
+    providers: useFaceSearch ? ["face-search"] : selectedProviders(),
+    job_id: jobId,
+  });
 
   statusEl.textContent = `Job ${jobId} running...`;
 
   for (;;) {
-    await new Promise(r => setTimeout(r, 1000));
+    await new Promise((r) => setTimeout(r, 1000));
     const jr = await fetch(`/api/jobs/${jobId}`);
     const job = await jr.json();
 
-    if (job.state === 'done') {
-      statusEl.textContent = 'Done.';
-      markSearchHistory(jobId, { state: 'done', results_count: (job.results || []).length });
+    if (job.state === "done") {
+      statusEl.textContent = "Done.";
+      markSearchHistory(jobId, {
+        state: "done",
+        results_count: (job.results || []).length,
+      });
       renderResults(job);
       return;
     }
-    if (job.state === 'failed') {
-      statusEl.textContent = 'Failed: ' + (job.error || 'unknown');
-      markSearchHistory(jobId, { state: 'failed', error: job.error || 'unknown' });
+    if (job.state === "failed") {
+      statusEl.textContent = "Failed: " + (job.error || "unknown");
+      markSearchHistory(jobId, {
+        state: "failed",
+        error: job.error || "unknown",
+      });
       return;
     }
     statusEl.textContent = `Running... (${(job.results || []).length} results so far)`;
@@ -267,26 +336,38 @@ async function startScan() {
 }
 
 async function initSearchView() {
-  const loadBtn = document.getElementById('loadProviders');
-  const allBtn = document.getElementById('selectAll');
-  const noneBtn = document.getElementById('selectNone');
-  const startBtn = document.getElementById('start');
-  const statusEl = document.getElementById('status');
-  const whoEl = document.getElementById('whoami');
+  const loadBtn = document.getElementById("loadProviders");
+  const allBtn = document.getElementById("selectAll");
+  const noneBtn = document.getElementById("selectNone");
+  const startBtn = document.getElementById("start");
+  const statusEl = document.getElementById("status");
+  const whoEl = document.getElementById("whoami");
+  const enableFaceSearchEl = document.getElementById("enableFaceSearch");
+  const faceSearchContainerEl = document.getElementById("faceSearchContainer");
+
+  enableFaceSearchEl.onchange = () => {
+    faceSearchContainerEl.style.display = enableFaceSearchEl.checked
+      ? "block"
+      : "none";
+  };
 
   loadBtn.onclick = async () => {
-    statusEl.textContent = 'Loading providers...';
+    statusEl.textContent = "Loading providers...";
     const names = await fetchProviders();
     renderProviders(names);
     statusEl.textContent = `Loaded ${names.length} providers.`;
   };
 
   allBtn.onclick = () => {
-    document.querySelectorAll('input[type="checkbox"][data-name]').forEach(x => x.checked = true);
+    document
+      .querySelectorAll('input[type="checkbox"][data-name]')
+      .forEach((x) => (x.checked = true));
   };
 
   noneBtn.onclick = () => {
-    document.querySelectorAll('input[type="checkbox"][data-name]').forEach(x => x.checked = false);
+    document
+      .querySelectorAll('input[type="checkbox"][data-name]')
+      .forEach((x) => (x.checked = false));
   };
 
   startBtn.onclick = startScan;
@@ -297,10 +378,10 @@ async function initSearchView() {
 
   const who = await fetchWhoami();
   if (who && who.client_ip) {
-    const via = who.via ? ` (${who.via})` : '';
+    const via = who.via ? ` (${who.via})` : "";
     whoEl.textContent = `Your IP (as seen by the API): ${who.client_ip}${via}`;
   } else {
-    whoEl.textContent = '';
+    whoEl.textContent = "";
   }
 }
 
@@ -308,29 +389,32 @@ async function initSearchView() {
 // Reverse image
 // ----------------------
 function initReverseView() {
-  const img = document.getElementById('imageUrl');
-  const out = document.getElementById('reverseOut');
-  const btn = document.getElementById('reverseGo');
+  const img = document.getElementById("imageUrl");
+  const out = document.getElementById("reverseOut");
+  const btn = document.getElementById("reverseGo");
 
   btn.onclick = async () => {
     const image_url = img.value.trim();
-    if (!image_url) return alert('Paste an image URL.');
+    if (!image_url) return alert("Paste an image URL.");
 
-    const r = await fetch('/api/reverse_image_links', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image_url })
+    const r = await fetch("/api/reverse_image_links", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ image_url }),
     });
 
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
 
     // Save local history
-    addReverseHistoryEntry({ image_url, links: (j.links || []) });
+    addReverseHistoryEntry({ image_url, links: j.links || [] });
 
-    out.innerHTML = (j.links || []).map(x =>
-      `<div class="linkrow"><a target="_blank" rel="noreferrer" href="${x.url}">${x.name}</a></div>`
-    ).join('');
+    out.innerHTML = (j.links || [])
+      .map(
+        (x) =>
+          `<div class="linkrow"><a target="_blank" rel="noreferrer" href="${x.url}">${x.name}</a></div>`,
+      )
+      .join("");
   };
 }
 
@@ -341,57 +425,71 @@ function fmtWhen(ts) {
   try {
     return new Date(ts).toLocaleString();
   } catch (_) {
-    return '';
+    return "";
   }
 }
 
 function initHistoryView() {
-  const searchBody = document.getElementById('searchHistoryBody');
-  const reverseBody = document.getElementById('reverseHistoryBody');
-  const searchEmpty = document.getElementById('searchHistoryEmpty');
-  const reverseEmpty = document.getElementById('reverseHistoryEmpty');
-  const clearSearch = document.getElementById('searchHistoryClear');
-  const clearReverse = document.getElementById('reverseHistoryClear');
-  const refreshBtn = document.getElementById('historyRefresh');
+  const searchBody = document.getElementById("searchHistoryBody");
+  const reverseBody = document.getElementById("reverseHistoryBody");
+  const searchEmpty = document.getElementById("searchHistoryEmpty");
+  const reverseEmpty = document.getElementById("reverseHistoryEmpty");
+  const clearSearch = document.getElementById("searchHistoryClear");
+  const clearReverse = document.getElementById("reverseHistoryClear");
+  const refreshBtn = document.getElementById("historyRefresh");
 
   function render() {
     // Search
     const searches = loadJsonArray(KEY_SEARCH_HISTORY);
-    if (searchEmpty) searchEmpty.style.display = searches.length ? 'none' : 'block';
+    if (searchEmpty)
+      searchEmpty.style.display = searches.length ? "none" : "block";
     if (searchBody) {
-      searchBody.innerHTML = searches.map(x => {
-        const providers = x.providers_count ?? '';
-        const job = x.job_id ? escapeHtml(x.job_id) : '';
-        const results = (x.results_count ?? '') + (x.state ? ` (${escapeHtml(x.state)})` : '');
-        return `<tr>
+      searchBody.innerHTML = searches
+        .map((x) => {
+          const providers = x.providers_count ?? "";
+          const job = x.job_id ? escapeHtml(x.job_id) : "";
+          const results =
+            (x.results_count ?? "") +
+            (x.state ? ` (${escapeHtml(x.state)})` : "");
+          return `<tr>
           <td>${escapeHtml(fmtWhen(x.ts))}</td>
-          <td>${escapeHtml(x.username || '')}</td>
+          <td>${escapeHtml(x.username || "")}</td>
           <td>${escapeHtml(String(providers))}</td>
           <td>${job}</td>
           <td>${escapeHtml(String(results))}</td>
         </tr>`;
-      }).join('');
+        })
+        .join("");
     }
 
     // Reverse
     const reverses = loadJsonArray(KEY_REVERSE_HISTORY);
-    if (reverseEmpty) reverseEmpty.style.display = reverses.length ? 'none' : 'block';
+    if (reverseEmpty)
+      reverseEmpty.style.display = reverses.length ? "none" : "block";
     if (reverseBody) {
-      reverseBody.innerHTML = reverses.map(x => {
-        const img = x.image_url || '';
-        const links = Array.isArray(x.links) ? x.links : [];
-        const linkHtml = links.slice(0, 4).map(l => {
-          const name = escapeHtml(l.name || 'Link');
-          const url = escapeHtml(l.url || '#');
-          return `<a class="mini-link" target="_blank" rel="noreferrer" href="${url}">${name}</a>`;
-        }).join(' ');
-        const more = links.length > 4 ? ` <span class="muted">+${links.length - 4} more</span>` : '';
-        return `<tr>
+      reverseBody.innerHTML = reverses
+        .map((x) => {
+          const img = x.image_url || "";
+          const links = Array.isArray(x.links) ? x.links : [];
+          const linkHtml = links
+            .slice(0, 4)
+            .map((l) => {
+              const name = escapeHtml(l.name || "Link");
+              const url = escapeHtml(l.url || "#");
+              return `<a class="mini-link" target="_blank" rel="noreferrer" href="${url}">${name}</a>`;
+            })
+            .join(" ");
+          const more =
+            links.length > 4
+              ? ` <span class="muted">+${links.length - 4} more</span>`
+              : "";
+          return `<tr>
           <td>${escapeHtml(fmtWhen(x.ts))}</td>
           <td>${escapeHtml(img)}</td>
           <td>${linkHtml}${more}</td>
         </tr>`;
-      }).join('');
+        })
+        .join("");
     }
   }
 
@@ -416,47 +514,50 @@ function initHistoryView() {
 // Token
 // ----------------------
 function initTokensView() {
-  const input = document.getElementById('tokenInput');
-  const save = document.getElementById('tokenSave');
-  const clear = document.getElementById('tokenClear');
+  const input = document.getElementById("tokenInput");
+  const save = document.getElementById("tokenSave");
+  const clear = document.getElementById("tokenClear");
 
-  const statusEl = document.getElementById('adminStatus');
-  const serverTokenInput = document.getElementById('serverTokenInput');
-  const bootstrapSecretInput = document.getElementById('bootstrapSecretInput');
-  const serverTokenSet = document.getElementById('serverTokenSet');
+  const statusEl = document.getElementById("adminStatus");
+  const serverTokenInput = document.getElementById("serverTokenInput");
+  const bootstrapSecretInput = document.getElementById("bootstrapSecretInput");
+  const serverTokenSet = document.getElementById("serverTokenSet");
 
-  input.value = getToken() || '';
+  input.value = getToken() || "";
   save.onclick = () => setToken(input.value.trim());
-  clear.onclick = () => { input.value = ''; setToken(''); };
+  clear.onclick = () => {
+    input.value = "";
+    setToken("");
+  };
 
   async function loadStatus() {
     try {
-      const r = await fetch('/api/admin/status', { cache: 'no-store' });
+      const r = await fetch("/api/admin/status", { cache: "no-store" });
       const j = await r.json().catch(() => ({}));
       if (statusEl) statusEl.textContent = JSON.stringify(j, null, 2);
 
       // If bootstrap secret is not required, hide the field to reduce confusion
       if (bootstrapSecretInput && !j.bootstrap_secret_required) {
-        bootstrapSecretInput.style.display = 'none';
+        bootstrapSecretInput.style.display = "none";
       }
     } catch (e) {
-      if (statusEl) statusEl.textContent = 'Failed to load status.';
+      if (statusEl) statusEl.textContent = "Failed to load status.";
     }
   }
 
   if (serverTokenSet) {
     serverTokenSet.onclick = async () => {
-      const newTok = (serverTokenInput?.value || '').trim();
-      if (!newTok) return alert('Enter a new server admin token.');
+      const newTok = (serverTokenInput?.value || "").trim();
+      if (!newTok) return alert("Enter a new server admin token.");
 
-      const headers = authHeaders({ 'Content-Type': 'application/json' });
-      const boot = (bootstrapSecretInput?.value || '').trim();
-      if (boot) headers['X-Bootstrap-Secret'] = boot;
+      const headers = authHeaders({ "Content-Type": "application/json" });
+      const boot = (bootstrapSecretInput?.value || "").trim();
+      if (boot) headers["X-Bootstrap-Secret"] = boot;
 
-      const r = await fetch('/api/admin/token', {
-        method: 'PUT',
+      const r = await fetch("/api/admin/token", {
+        method: "PUT",
         headers,
-        body: JSON.stringify({ token: newTok })
+        body: JSON.stringify({ token: newTok }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
@@ -464,7 +565,7 @@ function initTokensView() {
       // Store locally too so the next privileged request works
       setToken(newTok);
       input.value = newTok;
-      alert('Server token set.');
+      alert("Server token set.");
       await loadStatus();
     };
   }
@@ -476,26 +577,26 @@ function initTokensView() {
 // Plugins
 // ----------------------
 function initPluginsView() {
-  const fileEl = document.getElementById('pluginFile');
-  const uploadBtn = document.getElementById('pluginUpload');
-  const reloadBtn = document.getElementById('pluginReload');
-  const outEl = document.getElementById('pluginOut');
+  const fileEl = document.getElementById("pluginFile");
+  const uploadBtn = document.getElementById("pluginUpload");
+  const reloadBtn = document.getElementById("pluginReload");
+  const outEl = document.getElementById("pluginOut");
 
   function setOut(msg) {
     if (outEl) outEl.textContent = msg;
   }
 
   uploadBtn.onclick = async () => {
-    if (!getToken()) return alert('Set token first (Token page).');
-    if (!fileEl.files?.length) return alert('Choose a plugin file.');
+    if (!getToken()) return alert("Set token first (Token page).");
+    if (!fileEl.files?.length) return alert("Choose a plugin file.");
 
     const fd = new FormData();
-    fd.append('file', fileEl.files[0]);
+    fd.append("file", fileEl.files[0]);
 
-    const r = await fetch('/api/plugin/upload', {
-      method: 'POST',
+    const r = await fetch("/api/plugin/upload", {
+      method: "POST",
       headers: authHeaders(),
-      body: fd
+      body: fd,
     });
 
     const j = await r.json().catch(() => ({}));
@@ -505,10 +606,10 @@ function initPluginsView() {
   };
 
   reloadBtn.onclick = async () => {
-    if (!getToken()) return alert('Set token first (Token page).');
-    const r = await fetch('/api/providers/reload', {
-      method: 'POST',
-      headers: authHeaders({ 'Content-Type': 'application/json' })
+    if (!getToken()) return alert("Set token first (Token page).");
+    const r = await fetch("/api/providers/reload", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return alert(j.detail || `Reload failed (${r.status})`);
@@ -520,44 +621,44 @@ function initPluginsView() {
 // Settings (dynamic)
 // ----------------------
 function initSettingsView() {
-  const tableBody = document.querySelector('#settingsTable tbody');
-  const addBtn = document.getElementById('settingsAdd');
-  const saveBtn = document.getElementById('settingsSave');
-  const reloadBtn = document.getElementById('settingsReload');
-  const msgEl = document.getElementById('settingsMsg');
+  const tableBody = document.querySelector("#settingsTable tbody");
+  const addBtn = document.getElementById("settingsAdd");
+  const saveBtn = document.getElementById("settingsSave");
+  const reloadBtn = document.getElementById("settingsReload");
+  const msgEl = document.getElementById("settingsMsg");
 
   function showMsg(txt) {
-    msgEl.style.display = 'block';
+    msgEl.style.display = "block";
     msgEl.textContent = txt;
   }
 
-  function rowHtml(key = '', val = '', secret = false, isSet = false) {
-    const displayVal = secret ? (isSet ? '•••••• (set)' : '') : (val ?? '');
+  function rowHtml(key = "", val = "", secret = false, isSet = false) {
+    const displayVal = secret ? (isSet ? "•••••• (set)" : "") : (val ?? "");
     return `
       <tr>
         <td><input class="input s-key" placeholder="e.g. hibp_api_key" value="${escapeHtml(key)}"></td>
         <td><input class="input s-val" placeholder="value" value="${escapeHtml(displayVal)}"></td>
-        <td style="text-align:center"><input type="checkbox" class="s-secret" ${secret ? 'checked' : ''}></td>
+        <td style="text-align:center"><input type="checkbox" class="s-secret" ${secret ? "checked" : ""}></td>
         <td><button class="btn danger s-del" type="button">Remove</button></td>
       </tr>
     `;
   }
 
   function bindRowEvents() {
-    tableBody.querySelectorAll('.s-del').forEach(btn => {
-      btn.onclick = () => btn.closest('tr').remove();
+    tableBody.querySelectorAll(".s-del").forEach((btn) => {
+      btn.onclick = () => btn.closest("tr").remove();
     });
   }
 
   async function load() {
     if (!getToken()) {
-      tableBody.innerHTML = '';
-      showMsg('Set token first (Token page).');
+      tableBody.innerHTML = "";
+      showMsg("Set token first (Token page).");
       return;
     }
 
-    tableBody.innerHTML = '';
-    const r = await fetch('/api/settings', { headers: authHeaders() });
+    tableBody.innerHTML = "";
+    const r = await fetch("/api/settings", { headers: authHeaders() });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) {
       showMsg(j.detail || `Failed (${r.status})`);
@@ -566,45 +667,48 @@ function initSettingsView() {
 
     const settings = j.settings || {};
     for (const [k, meta] of Object.entries(settings)) {
-      tableBody.insertAdjacentHTML('beforeend', rowHtml(k, meta.value, meta.secret, meta.is_set));
+      tableBody.insertAdjacentHTML(
+        "beforeend",
+        rowHtml(k, meta.value, meta.secret, meta.is_set),
+      );
     }
 
     bindRowEvents();
-    showMsg('Loaded.');
+    showMsg("Loaded.");
   }
 
   addBtn.onclick = () => {
-    tableBody.insertAdjacentHTML('beforeend', rowHtml());
+    tableBody.insertAdjacentHTML("beforeend", rowHtml());
     bindRowEvents();
   };
 
   saveBtn.onclick = async () => {
-    if (!getToken()) return alert('Set token first (Token page).');
+    if (!getToken()) return alert("Set token first (Token page).");
 
-    const rows = [...tableBody.querySelectorAll('tr')];
+    const rows = [...tableBody.querySelectorAll("tr")];
     const out = {};
 
     for (const tr of rows) {
-      const k = tr.querySelector('.s-key').value.trim();
-      const v = tr.querySelector('.s-val').value;
-      const secret = tr.querySelector('.s-secret').checked;
+      const k = tr.querySelector(".s-key").value.trim();
+      const v = tr.querySelector(".s-val").value;
+      const secret = tr.querySelector(".s-secret").checked;
       if (!k) continue;
 
       // If secret and user left placeholder, don't overwrite
-      if (secret && (v === '•••••• (set)' || v.trim() === '')) continue;
+      if (secret && (v === "•••••• (set)" || v.trim() === "")) continue;
       out[k] = v;
     }
 
-    const r = await fetch('/api/settings', {
-      method: 'PUT',
-      headers: authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ settings: out })
+    const r = await fetch("/api/settings", {
+      method: "PUT",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ settings: out }),
     });
 
     const j = await r.json().catch(() => ({}));
     if (!r.ok) return showMsg(j.detail || `Save failed (${r.status})`);
 
-    showMsg('Saved. Reloading…');
+    showMsg("Saved. Reloading…");
     await load();
   };
 
@@ -614,27 +718,27 @@ function initSettingsView() {
 }
 
 function escapeHtml(s) {
-  return String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
 // logout
 const logoutBtn = document.querySelector("[data-action='logout']");
 if (logoutBtn) {
   logoutBtn.onclick = () => {
-    setToken('');
+    setToken("");
     location.reload();
   };
 }
 
 // menu clicks
-document.querySelectorAll('.menu-btn[data-view]').forEach(btn => {
+document.querySelectorAll(".menu-btn[data-view]").forEach((btn) => {
   btn.onclick = () => loadView(btn.dataset.view);
 });
 
 renderTokenStatus();
-loadView('dashboard');
+loadView("dashboard");

@@ -2,9 +2,14 @@ from __future__ import annotations
 
 import json
 import re
+import warnings
 from typing import Any, Dict, List, Optional
 
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, MarkupResemblesLocatorWarning
+
+# The content of some pages can trigger this warning from BeautifulSoup.
+# Since we are confident we are passing HTML content, we can suppress it.
+warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
 
 
 _KM_RE = re.compile(r"^([0-9]+(?:\.[0-9]+)?)\s*([KM])$")
@@ -45,7 +50,9 @@ def extract_opengraph(html: str) -> Dict[str, Any]:
     """Extract common metadata (title/description/image/url) from OG + Twitter cards."""
     if not html:
         return {}
-    soup = BeautifulSoup(html, "html.parser")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+        soup = BeautifulSoup(html, "html.parser")
 
     def meta(prop: str) -> Optional[str]:
         tag = soup.find("meta", attrs={"property": prop})
@@ -84,7 +91,9 @@ def extract_json_ld(html: str) -> Dict[str, Any]:
     """Extract a few useful fields from JSON-LD blocks if present."""
     if not html:
         return {}
-    soup = BeautifulSoup(html, "html.parser")
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=MarkupResemblesLocatorWarning)
+        soup = BeautifulSoup(html, "html.parser")
     blocks = soup.find_all("script", attrs={"type": "application/ld+json"})
     if not blocks:
         return {}

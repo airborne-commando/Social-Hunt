@@ -5,10 +5,12 @@ from typing import Dict, List, Optional
 
 import httpx
 
+from .addons_base import BaseAddon
+from .addons_registry import build_addon_registry, load_enabled_addons
 from .providers_base import BaseProvider
 from .rate_limit import HostRateLimiter
-from .ua import UA_PROFILES, merge_headers
 from .types import ProviderResult
+from .ua import UA_PROFILES, merge_headers
 
 
 class SocialHuntEngine:
@@ -21,8 +23,15 @@ class SocialHuntEngine:
         self.registry = registry
         self.max_concurrency = int(max_concurrency)
         self.limiter = HostRateLimiter(min_interval_sec=min_host_interval_sec)
+        self.addon_registry = build_addon_registry()
+        self.enabled_addon_names = load_enabled_addons()
 
-    async def scan_username(self, username: str, providers: Optional[List[str]] = None) -> List[ProviderResult]:
+    async def scan_username(
+        self,
+        username: str,
+        providers: Optional[List[str]] = None,
+        dynamic_addons: Optional[List[BaseAddon]] = None,
+    ) -> List[ProviderResult]:
         if providers:
             chosen = [p for p in providers if p in self.registry]
         else:
@@ -37,7 +46,9 @@ class SocialHuntEngine:
                 url = prov.build_url(username)
 
                 base_headers = UA_PROFILES.get("desktop_chrome", {})
-                prof_headers = UA_PROFILES.get(getattr(prov, "ua_profile", "desktop_chrome"), {})
+                prof_headers = UA_PROFILES.get(
+                    getattr(prov, "ua_profile", "desktop_chrome"), {}
+                )
                 headers = merge_headers(base_headers, prof_headers)
 
                 await self.limiter.wait(url)
@@ -47,5 +58,23 @@ class SocialHuntEngine:
 
             tasks = [asyncio.create_task(run_one(p)) for p in chosen]
             results = await asyncio.gather(*tasks)
+
+            # --- Addon Processing ---
+            addons_to_run = [
+                self.addon_registry[name]
+                for name in self.enabled_addon_names
+                if name in self.addon_registry
+            ]
+            if dynamic_addons:
+                addons_to_run.extend(dynamic_addons)
+
+            if addons_to_run:
+                addon_tasks = [
+                    asyncio.create_task(
+                        addon.run(username, results, client, self.limiter)
+                    )
+                    for addon in addons_to_run
+                ]
+                await asyncio.gather(*addon_tasks)
 
         return sorted(results, key=lambda r: r.provider.lower())

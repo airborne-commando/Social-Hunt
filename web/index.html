@@ -1,49 +1,65 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Social Hunt</title>
-    <link rel="stylesheet" href="/static/styles.css?v=layout2" />
-  </head>
-  <body>
-    <div id="appShell">
-      <aside class="sidebar">
-        <div class="brand">
-          <div class="brand-title">Social Hunt</div>
-          <div class="brand-sub">Self-hosted OSINT aggregator</div>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Social Hunt</title>
+        <link rel="stylesheet" href="/static/styles.css?v=layout2" />
+    </head>
+    <body>
+        <div id="appShell">
+            <aside class="sidebar">
+                <div class="brand">
+                    <div class="brand-title">Social Hunt</div>
+                    <div class="brand-sub">Self-hosted OSINT aggregator</div>
+                </div>
+
+                <nav class="menu">
+                    <button class="menu-btn" data-view="dashboard">
+                        Dashboard
+                    </button>
+                    <button class="menu-btn" data-view="search">Search</button>
+                    <button class="menu-btn" data-view="reverse">
+                        Reverse Image
+                    </button>
+                    <button class="menu-btn" data-view="history">
+                        History
+                    </button>
+                    <button class="menu-btn" data-view="plugins">
+                        Plugins
+                    </button>
+                    <button class="menu-btn" data-view="tokens">Token</button>
+                    <button class="menu-btn" data-view="settings">
+                        Settings
+                    </button>
+
+                    <div class="menu-sep"></div>
+                    <button class="menu-btn danger" data-action="logout">
+                        Logout
+                    </button>
+                </nav>
+
+                <div class="sidebar-footer">
+                    <div class="muted">
+                        Tip: set your admin token once in <b>Token</b>.
+                    </div>
+                </div>
+            </aside>
+
+            <main class="main">
+                <header class="topbar">
+                    <div id="viewTitle" class="view-title">Dashboard</div>
+                    <div class="topbar-right">
+                        <span class="pill" id="tokenStatus"
+                            >Token: not set</span
+                        >
+                    </div>
+                </header>
+
+                <section id="viewContainer" class="view"></section>
+            </main>
         </div>
 
-        <nav class="menu">
-          <button class="menu-btn" data-view="dashboard">Dashboard</button>
-          <button class="menu-btn" data-view="search">Search</button>
-          <button class="menu-btn" data-view="reverse">Reverse Image</button>
-          <button class="menu-btn" data-view="history">History</button>
-          <button class="menu-btn" data-view="plugins">Plugins</button>
-          <button class="menu-btn" data-view="tokens">Token</button>
-          <button class="menu-btn" data-view="settings">Settings</button>
-
-          <div class="menu-sep"></div>
-          <button class="menu-btn danger" data-action="logout">Logout</button>
-        </nav>
-
-        <div class="sidebar-footer">
-          <div class="muted">Tip: set your admin token once in <b>Token</b>.</div>
-        </div>
-      </aside>
-
-      <main class="main">
-        <header class="topbar">
-          <div id="viewTitle" class="view-title">Dashboard</div>
-          <div class="topbar-right">
-            <span class="pill" id="tokenStatus">Token: not set</span>
-          </div>
-        </header>
-
-        <section id="viewContainer" class="view"></section>
-      </main>
-    </div>
-
-    <script src="/static/app.js?v=layout2"></script>
-  </body>
+        <script src="/static/app.js?v=layout2"></script>
+    </body>
 </html>

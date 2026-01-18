@@ -7,16 +7,16 @@ import uuid
 import zipfile
 from io import BytesIO
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import FastAPI, HTTPException, Request, UploadFile, File, Header
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from social_hunt.registry import build_registry, list_provider_names
-from social_hunt.engine import SocialHuntEngine
 from api.settings_store import SettingsStore, mask_for_client
+from social_hunt.engine import SocialHuntEngine
+from social_hunt.registry import build_registry, list_provider_names
 
 app = FastAPI(title="Social-Hunt API", version="2.2.0")
 
@@ -25,6 +25,7 @@ app = FastAPI(title="Social-Hunt API", version="2.2.0")
 # working directory (systemd, Docker, etc.) does not break persistence.
 APP_ROOT = Path(__file__).resolve().parents[1]
 
+
 def _resolve_env_path(env_name: str, default_rel: str) -> Path:
     v = (os.getenv(env_name) or "").strip()
     if not v:
@@ -32,12 +33,14 @@ def _resolve_env_path(env_name: str, default_rel: str) -> Path:
     p = Path(v)
     return p if p.is_absolute() else (APP_ROOT / p).resolve()
 
+
 # ---- settings store ----
 SETTINGS_PATH = _resolve_env_path("SOCIAL_HUNT_SETTINGS_PATH", "data/settings.json")
 settings_store = SettingsStore(str(SETTINGS_PATH))
 
 # providers yaml (anchored)
 PROVIDERS_YAML = _resolve_env_path("SOCIAL_HUNT_PROVIDERS_YAML", "providers.yaml")
+
 
 # ---- auth (simple admin token) ----
 # Priority order:
@@ -97,15 +100,26 @@ async def api_admin_status():
     uploads = (os.getenv("SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD") or "0").strip() == "1"
     return {
         "admin_token_set": bool(token),
-        "admin_token_source": "env" if env_token else ("settings" if settings_token else "none"),
+        "admin_token_source": "env"
+        if env_token
+        else ("settings" if settings_token else "none"),
         "web_plugin_upload_enabled": uploads,
-        "bootstrap_env_enabled": (os.getenv("SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP") or "").strip() == "1",
-        "bootstrap_secret_required": bool((os.getenv("SOCIAL_HUNT_BOOTSTRAP_SECRET") or "").strip()),
+        "bootstrap_env_enabled": (
+            os.getenv("SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP") or ""
+        ).strip()
+        == "1",
+        "bootstrap_secret_required": bool(
+            (os.getenv("SOCIAL_HUNT_BOOTSTRAP_SECRET") or "").strip()
+        ),
     }
 
 
 @app.put("/api/admin/token")
-async def api_admin_set_token(req: AdminTokenPutReq, request: Request, x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token")):
+async def api_admin_set_token(
+    req: AdminTokenPutReq,
+    request: Request,
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
     new_token = (req.token or "").strip()
     if not new_token:
         raise HTTPException(status_code=400, detail="token required")
@@ -160,7 +174,9 @@ async def api_providers():
 
 
 @app.post("/api/providers/reload")
-async def api_providers_reload(x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token")):
+async def api_providers_reload(
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
     require_admin(x_plugin_token)
     reload_registry()
     return {"ok": True, "providers": list_provider_names(registry)}
@@ -223,9 +239,73 @@ async def api_job(job_id: str):
     return job
 
 
+@app.post("/api/face-search")
+async def api_face_search(
+    username: str = Form(...),
+    files: List[UploadFile] = File(...),
+):
+    username = (username or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="username required")
+    if not files:
+        raise HTTPException(status_code=400, detail="at least one file is required")
+
+    job_id = str(uuid.uuid4())
+    JOBS[job_id] = {"state": "running", "results": [], "username": username}
+
+    # Create a temporary directory for the uploaded images
+    temp_dir = APP_ROOT / "temp" / job_id
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    image_paths = []
+    for file in files:
+        try:
+            # Sanitize filename
+            filename = _safe_name(file.filename)
+            file_path = temp_dir / filename
+            with open(file_path, "wb") as buffer:
+                buffer.write(await file.read())
+            image_paths.append(str(file_path))
+        except Exception:
+            # Handle file saving errors
+            JOBS[job_id]["state"] = "failed"
+            JOBS[job_id]["error"] = "Failed to save uploaded file."
+            return {"job_id": job_id}
+
+    from social_hunt.addons.face_matcher import FaceMatcherAddon
+
+    face_matcher_addon = FaceMatcherAddon(target_image_paths=image_paths)
+
+    async def runner():
+        try:
+            res = await engine.scan_username(
+                username, dynamic_addons=[face_matcher_addon]
+            )
+            JOBS[job_id]["results"] = [r.to_dict() for r in res]
+            JOBS[job_id]["state"] = "done"
+        except Exception as e:
+            JOBS[job_id]["state"] = "failed"
+            JOBS[job_id]["error"] = str(e)
+        finally:
+            # Clean up the temporary files
+            for path in image_paths:
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
+            try:
+                os.rmdir(temp_dir)
+            except OSError:
+                pass
+
+    asyncio.create_task(runner())
+    return {"job_id": job_id}
+
+
 # ---------------------------
 # Reverse image search links
 # ---------------------------
+
 
 def _build_reverse_links(image_url: str) -> List[Dict[str, str]]:
     from urllib.parse import quote_plus
@@ -235,11 +315,20 @@ def _build_reverse_links(image_url: str) -> List[Dict[str, str]]:
 
     # Note: some endpoints change over time; these are common URL-entry points.
     return [
-        {"name": "Google Images", "url": f"https://www.google.com/searchbyimage?image_url={q}"},
+        {
+            "name": "Google Images",
+            "url": f"https://www.google.com/searchbyimage?image_url={q}",
+        },
         {"name": "Google Lens", "url": f"https://lens.google.com/uploadbyurl?url={q}"},
         {"name": "TinEye", "url": f"https://tineye.com/search?url={q}"},
-        {"name": "Bing Visual Search", "url": f"https://www.bing.com/images/search?q=imgurl:{q}&view=detailv2&iss=sbi"},
-        {"name": "Yandex Images", "url": f"https://yandex.com/images/search?rpt=imageview&url={q}"},
+        {
+            "name": "Bing Visual Search",
+            "url": f"https://www.bing.com/images/search?q=imgurl:{q}&view=detailv2&iss=sbi",
+        },
+        {
+            "name": "Yandex Images",
+            "url": f"https://yandex.com/images/search?rpt=imageview&url={q}",
+        },
     ]
 
 
@@ -263,7 +352,9 @@ async def api_reverse_image_links(req: ReverseImageReq):
 
 
 @app.get("/api/settings")
-async def api_get_settings(x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token")):
+async def api_get_settings(
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
     require_admin(x_plugin_token)
     data = settings_store.load()
     return {"settings": mask_for_client(data)}
@@ -274,7 +365,10 @@ class SettingsPutReq(BaseModel):
 
 
 @app.put("/api/settings")
-async def api_put_settings(req: SettingsPutReq, x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token")):
+async def api_put_settings(
+    req: SettingsPutReq,
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
     require_admin(x_plugin_token)
 
     if not isinstance(req.settings, dict):
@@ -366,7 +460,11 @@ async def api_plugin_upload(
 
     reload_registry()
 
-    return {"ok": True, "installed": installed, "providers": list_provider_names(registry)}
+    return {
+        "ok": True,
+        "installed": installed,
+        "providers": list_provider_names(registry),
+    }
 
 
 # ---- UI ----
