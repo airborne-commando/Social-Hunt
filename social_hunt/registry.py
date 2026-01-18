@@ -7,12 +7,14 @@ from typing import Dict, List
 
 import yaml
 
+from .paths import resolve_path
 from .providers_yaml import PatternProvider
 from .providers_base import BaseProvider
 
 
 def load_yaml_providers(path: str = "providers.yaml") -> Dict[str, BaseProvider]:
-    with open(path, "r", encoding="utf-8") as f:
+    p = resolve_path(path)
+    with p.open("r", encoding="utf-8") as f:
         data = yaml.safe_load(f) or {}
 
     providers: Dict[str, BaseProvider] = {}
@@ -24,9 +26,12 @@ def load_yaml_providers(path: str = "providers.yaml") -> Dict[str, BaseProvider]
 
 
 def load_yaml_providers_from_dir(dir_path: str = "plugins/providers") -> Dict[str, BaseProvider]:
-    """Load additional providers from YAML files in plugins/providers/*.yml|*.yaml"""
+    """Load additional providers from YAML files in plugins/providers/*.yml|*.yaml
+
+    Path is resolved relative to the project root unless absolute.
+    """
     providers: Dict[str, BaseProvider] = {}
-    d = Path(dir_path)
+    d = resolve_path(dir_path)
     if not d.exists() or not d.is_dir():
         return providers
 
@@ -48,7 +53,7 @@ def load_yaml_providers_from_dir(dir_path: str = "plugins/providers") -> Dict[st
 
 
 def load_plugin_providers() -> Dict[str, BaseProvider]:
-    """Load any providers from social_hunt.providers.* (Python plugins shipped with repo)."""
+    """Load any providers from social_hunt.providers.* (Python providers shipped with repo)."""
     providers: Dict[str, BaseProvider] = {}
     pkg = importlib.import_module("social_hunt.providers")
 
@@ -72,7 +77,7 @@ def build_registry(yaml_path: str = "providers.yaml") -> Dict[str, BaseProvider]
     reg = load_yaml_providers(yaml_path)
     # YAML plugin packs from plugins/providers override base YAML if same key
     reg.update(load_yaml_providers_from_dir("plugins/providers"))
-    # Python plugins override YAML entries if same name
+    # Python providers override YAML entries if same name
     reg.update(load_plugin_providers())
     return reg
 

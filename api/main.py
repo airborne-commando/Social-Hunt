@@ -18,37 +18,130 @@ from social_hunt.registry import build_registry, list_provider_names
 from social_hunt.engine import SocialHuntEngine
 from api.settings_store import SettingsStore, mask_for_client
 
-app = FastAPI(title="Social-Hunt API", version="2.1.0")
+app = FastAPI(title="Social-Hunt API", version="2.2.0")
+
+# ---- paths ----
+# Anchor all filesystem paths to the repo root so running from a different
+# working directory (systemd, Docker, etc.) does not break persistence.
+APP_ROOT = Path(__file__).resolve().parents[1]
+
+def _resolve_env_path(env_name: str, default_rel: str) -> Path:
+    v = (os.getenv(env_name) or "").strip()
+    if not v:
+        v = default_rel
+    p = Path(v)
+    return p if p.is_absolute() else (APP_ROOT / p).resolve()
+
+# ---- settings store ----
+SETTINGS_PATH = _resolve_env_path("SOCIAL_HUNT_SETTINGS_PATH", "data/settings.json")
+settings_store = SettingsStore(str(SETTINGS_PATH))
+
+# providers yaml (anchored)
+PROVIDERS_YAML = _resolve_env_path("SOCIAL_HUNT_PROVIDERS_YAML", "providers.yaml")
 
 # ---- auth (simple admin token) ----
-ADMIN_TOKEN = (os.getenv("SOCIAL_HUNT_PLUGIN_TOKEN") or "").strip()
+# Priority order:
+#   1) SOCIAL_HUNT_PLUGIN_TOKEN env var (recommended for production)
+#   2) admin_token stored in settings.json (can be set via the dashboard in bootstrap mode)
+def _current_admin_token() -> str:
+    env_token = (os.getenv("SOCIAL_HUNT_PLUGIN_TOKEN") or "").strip()
+    if env_token:
+        return env_token
+    try:
+        data = settings_store.load()
+        return str(data.get("admin_token") or "").strip()
+    except Exception:
+        return ""
 
 
 def require_admin(x_plugin_token: Optional[str]) -> None:
-    # Admin token is server-side only (set via env var). The dashboard "Token" page
-    # merely stores the token in your browser and sends it with requests.
-    if not ADMIN_TOKEN:
+    token = _current_admin_token()
+    if not token:
         raise HTTPException(
             status_code=500,
-            detail="Server missing SOCIAL_HUNT_PLUGIN_TOKEN (set env var and restart the API)",
+            detail=(
+                "No admin token configured. Set SOCIAL_HUNT_PLUGIN_TOKEN (env var) "
+                "or set admin_token via the Token page while bootstrap is enabled."
+            ),
         )
-    if not x_plugin_token or x_plugin_token != ADMIN_TOKEN:
+    if not x_plugin_token or x_plugin_token != token:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
-# ---- settings store ----
-SETTINGS_PATH = os.getenv("SOCIAL_HUNT_SETTINGS_PATH", "data/settings.json")
-settings_store = SettingsStore(SETTINGS_PATH)
+def _bootstrap_allowed(request: Request) -> bool:
+    """Allow setting the admin token via the web UI only when explicitly enabled.
+
+    Enable bootstrap by setting one of:
+      - SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP=1
+      - SOCIAL_HUNT_BOOTSTRAP_SECRET=<random> and providing it in the request
+    """
+    if (os.getenv("SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP") or "").strip() == "1":
+        return True
+    # Secret-based bootstrap (safer for remote)
+    secret = (os.getenv("SOCIAL_HUNT_BOOTSTRAP_SECRET") or "").strip()
+    if secret:
+        provided = (request.headers.get("X-Bootstrap-Secret") or "").strip()
+        return provided == secret
+    return False
+
+
+class AdminTokenPutReq(BaseModel):
+    token: str
+
+
+@app.get("/api/admin/status")
+async def api_admin_status():
+    env_token = (os.getenv("SOCIAL_HUNT_PLUGIN_TOKEN") or "").strip()
+    settings_token = str(settings_store.load().get("admin_token") or "").strip()
+    token = env_token or settings_token
+    uploads = (os.getenv("SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD") or "0").strip() == "1"
+    return {
+        "admin_token_set": bool(token),
+        "admin_token_source": "env" if env_token else ("settings" if settings_token else "none"),
+        "web_plugin_upload_enabled": uploads,
+        "bootstrap_env_enabled": (os.getenv("SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP") or "").strip() == "1",
+        "bootstrap_secret_required": bool((os.getenv("SOCIAL_HUNT_BOOTSTRAP_SECRET") or "").strip()),
+    }
+
+
+@app.put("/api/admin/token")
+async def api_admin_set_token(req: AdminTokenPutReq, request: Request, x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token")):
+    new_token = (req.token or "").strip()
+    if not new_token:
+        raise HTTPException(status_code=400, detail="token required")
+    if len(new_token) < 20:
+        raise HTTPException(status_code=400, detail="token too short (use >= 20 chars)")
+
+    current = _current_admin_token()
+
+    # If a token already exists, you must authenticate with it.
+    if current:
+        require_admin(x_plugin_token)
+    else:
+        # No token exists; only allow setting it when bootstrap is enabled.
+        if not _bootstrap_allowed(request):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    "Bootstrap disabled. Set SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP=1 (temporary) "
+                    "or set SOCIAL_HUNT_BOOTSTRAP_SECRET and send X-Bootstrap-Secret."
+                ),
+            )
+
+    data = settings_store.load()
+    data["admin_token"] = new_token
+    settings_store.save(data)
+    return {"ok": True}
 
 
 # ---- core engine ----
-registry = build_registry("providers.yaml")
+registry = build_registry(str(PROVIDERS_YAML))
 engine = SocialHuntEngine(registry, max_concurrency=6)
 
 
 def reload_registry() -> None:
     global registry
-    registry = build_registry("providers.yaml")
+    registry = build_registry(str(PROVIDERS_YAML))
     engine.registry = registry
 
 
@@ -201,7 +294,7 @@ async def api_put_settings(req: SettingsPutReq, x_plugin_token: Optional[str] = 
 # ---------------------------
 
 
-PLUGIN_DIR = Path("plugins/providers")
+PLUGIN_DIR = _resolve_env_path("SOCIAL_HUNT_PLUGIN_DIR", "plugins/providers")
 PLUGIN_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -243,6 +336,12 @@ async def api_plugin_upload(
     file: UploadFile = File(...),
     x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
 ):
+    # Extra safety: web uploads are disabled unless explicitly enabled
+    if (os.getenv("SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD") or "0").strip() != "1":
+        raise HTTPException(
+            status_code=403,
+            detail="Web plugin uploads are disabled (set SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1 and restart)",
+        )
     require_admin(x_plugin_token)
 
     raw = await file.read()
@@ -271,9 +370,10 @@ async def api_plugin_upload(
 
 
 # ---- UI ----
-app.mount("/static", StaticFiles(directory="web"), name="static")
+WEB_DIR = (APP_ROOT / "web").resolve()
+app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 
 
 @app.get("/")
 async def root():
-    return FileResponse("web/index.html")
+    return FileResponse(str(WEB_DIR / "index.html"))

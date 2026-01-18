@@ -1,12 +1,42 @@
 <h2>Token</h2>
-<p class="muted">Set your admin token (stored only in your browser). This is used for Settings + Plugin uploads.</p>
+<p class="muted">
+  This token is used for admin actions (Settings, provider reload, plugin uploads). You can store it in your browser
+  <em>and</em> (optionally) set the server-side admin token from here when bootstrap is enabled.
+</p>
 
-<div class="card">
-  <div class="row">
-    <input id="tokenInput" type="password" placeholder="Enter admin token" />
+<div class="grid">
+  <div class="card half">
+    <h3>Browser token</h3>
+    <p class="muted">Stored in <code>localStorage</code> (this device only).</p>
+    <div class="row">
+      <input id="tokenInput" type="password" placeholder="Enter admin token" />
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="tokenSave" class="btn good" type="button">Save</button>
+      <button id="tokenClear" class="btn danger" type="button">Clear</button>
+    </div>
   </div>
-  <div class="row" style="margin-top:10px">
-    <button id="tokenSave" class="btn good" type="button">Save</button>
-    <button id="tokenClear" class="btn danger" type="button">Clear</button>
+
+  <div class="card half">
+    <h3>Server status</h3>
+    <pre id="adminStatus" style="margin-top:10px"></pre>
+  </div>
+
+  <div class="card">
+    <h3>Set server admin token</h3>
+    <p class="muted">
+      If the server has no admin token yet, you can set it here only when bootstrap is enabled.
+      If a token already exists, you must authenticate with the current token.
+    </p>
+    <div class="row">
+      <input id="serverTokenInput" type="password" placeholder="New server admin token (>= 20 chars)" />
+      <input id="bootstrapSecretInput" type="password" placeholder="Bootstrap secret (optional)" style="max-width: 420px" />
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="serverTokenSet" class="btn good" type="button">Set / Rotate token</button>
+    </div>
+    <p class="hint" style="margin-top:10px">
+      Tip: set <code>SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP=1</code> temporarily, set your token here, then remove it and restart.
+    </p>
   </div>
 </div>
