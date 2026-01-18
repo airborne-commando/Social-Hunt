@@ -5,7 +5,7 @@
 ![Python Version](https://img.shields.io/badge/python-3.11%2B-blue)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.100%2B-05998b)
 
-**Social-Hunt** is a lightweight, high-performance OSINT engine designed to find usernames across hundreds of platforms. Unlike basic scrapers, it prioritizes **metadata depth** (followers, avatars, bios) and **transparency**—clearly distinguishing between a missing profile and a bot-wall.
+**Social-Hunt** is a lightweight, high-performance OSINT engine designed to find usernames across hundreds of platforms. Unlike basic scrapers, it prioritizes **metadata depth** (followers, avatars, bios) and **transparency** clearly distinguishing between a missing profile and a bot-wall.
 
 ---
 
