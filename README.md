@@ -19,6 +19,12 @@
     * **YAML:** Quick-add sites via regex patterns.
     * **Python Plugins:** Custom logic for complex APIs (GitHub, Reddit) to bypass simple limitations.
 * **Rate-Limit Aware:** Integrated per-host pacing and concurrency management.
+* **Advanced Addons:**
+    * **Face Matcher:** Dual-mode avatar comparison using:
+        * Facial recognition for custom avatars with faces
+        * Perceptual image hashing for default/generic avatars
+    * **HIBP Integration:** Check breach exposure via Have I Been Pwned API
+    * **Network Safety:** URL validation and content-type checking
 
 ---
 
@@ -28,18 +34,23 @@
 .
 ├── social_hunt/            # Core Engine
 │   ├── providers/          # Python Plugins (High-fidelity data)
+│   ├── addons/             # Extensible addon modules
 │   ├── engine.py           # Async scanning logic
 │   ├── registry.py         # Plugin & YAML loader
 │   └── rate_limit.py       # Pacing & Concurrency control
 ├── api/                    # FastAPI Server logic
 ├── web/                    # Frontend (HTML/JS/CSS)
 ├── providers.yaml          # Simple pattern-based definitions
+├── addons.yaml             # Addon configurations
 └── requirements.txt        # Dependencies
-🛠️ Installation
-Windows
-PowerShell
 ```
 
+---
+
+## 🛠️ Installation
+
+### Windows
+```powershell
 # Navigate to the directory
 cd Social-Hunt
 
@@ -50,64 +61,146 @@ py -m venv .venv
 # Install Dependencies
 python -m pip install -U pip
 pip install -r requirements.txt
-Linux / VPS
-Bash
+```
 
+### Linux / VPS
+```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -U pip
 pip install -r requirements.txt
-🖥️ Usage
-1. Web Interface (Recommended)
+```
+
+---
+
+## 🖥️ Usage
+
+### 1. Web Interface (Recommended)
 Launch the API and UI locally:
 
-Bash
-
+```bash
 python -m uvicorn api.main:app --host 127.0.0.1 --port 8000
-Access: Open http://127.0.0.1:8000/ in your browser.
+```
 
-2. Command Line (CLI)
+**Access:** Open http://127.0.0.1:8000/ in your browser.
+
+### 2. Command Line (CLI)
 Perform quick scans directly from your terminal:
 
-Bash
-
+```bash
 # Basic scan
 python -m social_hunt.cli username_here
 
 # Targeted scan with JSON export
 python -m social_hunt.cli username_here --platforms github reddit --format json
-🔌 Extending the Tool
-Option A: YAML (No-Code)
-Add a new site to providers.yaml:
+```
 
-YAML
+---
 
+## 🎯 Face Matcher Addon
+
+The Face Matcher addon enables identification of accounts by comparing avatar images using two complementary methods:
+
+### Features
+* **Face Recognition:** Detects and matches facial features in custom profile pictures
+* **Image Hash Matching:** Compares images using perceptual hashing (perfect for default avatars)
+* **Automatic Fallback:** Uses face matching when available, falls back to image hashing
+* **Configurable Threshold:** Adjust sensitivity for image similarity matching
+
+### How It Works
+1. Load target images (with or without faces)
+2. The addon extracts face encodings (if faces detected) and computes image hashes
+3. For each found profile:
+   - Downloads the avatar image
+   - Attempts face matching first (if target has faces)
+   - Falls back to image hash comparison
+   - Reports match with method used (`face_recognition` or `image_hash`)
+
+This dual approach allows you to identify:
+- Accounts using the same person's photo
+- Accounts using the same default/generic avatar
+- Accounts that reused the same uploaded image (logo, artwork, etc.)
+
+---
+
+## 🔌 Extending the Tool
+
+### Option A: YAML (No-Code)
+Add a new site to `providers.yaml`:
+
+```yaml
 newsite:
-  url: "[https://newsite.com/](https://newsite.com/){username}"
+  url: "https://newsite.com/{username}"
   timeout: 10
   ua_profile: "desktop_chrome"
   success_patterns: ["profile", "followers"]
   error_patterns: ["not found", "404"]
-Option B: Python Plugin (Custom Logic)
-For sites requiring API headers or complex parsing, create social_hunt/providers/newsite.py and subclass BaseProvider. Plugins can override YAML providers by using the same name.
+```
 
-🌐 API Documentation
-Endpoint	Method	Description
-/api/providers	GET	List all active YAML and Plugin providers.
-/api/search	POST	Start a search job (returns job_id).
-/api/jobs/{id}	GET	Poll for results and job state.
-/api/whoami	GET	Check the IP address the engine is using.
+### Option B: Python Plugin (Custom Logic)
+For sites requiring API headers or complex parsing, create `social_hunt/providers/newsite.py` and subclass `BaseProvider`. Plugins can override YAML providers by using the same name.
 
-Export to Sheets
+Example:
+```python
+from ..providers_base import BaseProvider
+from ..types import ProviderResult, ResultStatus
 
-🛡️ Security & Ethics
-Ethical Use: Intended for authorized investigative work and OSINT research.
+class NewSiteProvider(BaseProvider):
+    name = "newsite"
+    
+    async def check(self, username, client, headers):
+        # Your custom logic here
+        pass
+```
 
-Best Effort: Social-Hunt respects robots.txt where possible, but platforms like LinkedIn or TikTok may block automated requests.
+---
 
-Deployment: If hosting publicly, use a reverse proxy (Apache/Nginx) with Basic Auth or IP allowlisting.
+## 🌐 API Documentation
 
-📄 License
-This project is licensed under the GNU General Public License v3.0.
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/providers` | GET | List all active YAML and Plugin providers |
+| `/api/search` | POST | Start a search job (returns `job_id`) |
+| `/api/jobs/{id}` | GET | Poll for results and job state |
+| `/api/whoami` | GET | Check the IP address the engine is using |
 
+---
 
+## 🛡️ Security & Ethics
+
+* **Ethical Use:** Intended for authorized investigative work and OSINT research.
+* **Best Effort:** Social-Hunt respects `robots.txt` where possible, but platforms like LinkedIn or TikTok may block automated requests.
+* **Deployment:** If hosting publicly, use a reverse proxy (Apache/Nginx) with Basic Auth or IP allowlisting.
+* **Privacy:** No data is stored or transmitted to third parties. All searches are performed directly from your machine.
+
+---
+
+## 📝 Recent Improvements
+
+* **Enhanced Metadata Extraction:** Improved parsing with suppressed false-positive warnings
+* **Dual Avatar Matching:** Face recognition + image hashing for comprehensive profile matching
+* **Better Error Handling:** More descriptive error messages for debugging
+* **Cleaner Logs:** Reduced console spam from HTML parsing warnings
+
+---
+
+## 📄 License
+
+This project is licensed under the **GNU General Public License v3.0**.
+
+See [LICENSE](LICENSE) for details.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Feel free to:
+- Add new providers via YAML or Python plugins
+- Report bugs or suggest features via GitHub Issues
+- Submit pull requests with improvements
+
+---
+
+## 📖 Additional Documentation
+
+See [README_RUN.md](README_RUN.md) for quick start commands and configuration options.
