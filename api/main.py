@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
+import time
 import uuid
 import zipfile
 from io import BytesIO
@@ -34,12 +36,20 @@ def _resolve_env_path(env_name: str, default_rel: str) -> Path:
     return p if p.is_absolute() else (APP_ROOT / p).resolve()
 
 
+WEB_DIR = (APP_ROOT / "web").resolve()
+UPLOADS_DIR = (WEB_DIR / "temp_uploads").resolve()
+UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+
 # ---- settings store ----
 SETTINGS_PATH = _resolve_env_path("SOCIAL_HUNT_SETTINGS_PATH", "data/settings.json")
 settings_store = SettingsStore(str(SETTINGS_PATH))
 
 # providers yaml (anchored)
 PROVIDERS_YAML = _resolve_env_path("SOCIAL_HUNT_PROVIDERS_YAML", "providers.yaml")
+
+JOBS_DIR = _resolve_env_path("SOCIAL_HUNT_JOBS_DIR", "data/jobs")
+JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 @app.on_event("startup")
@@ -175,6 +185,27 @@ def reload_registry() -> None:
 JOBS: Dict[str, Dict[str, Any]] = {}
 
 
+def _save_job_to_disk(job_id: str):
+    job = JOBS.get(job_id)
+    if not job:
+        return
+    try:
+        path = JOBS_DIR / f"{job_id}.json"
+        path.write_text(json.dumps(job, indent=2), encoding="utf-8")
+    except Exception as e:
+        print(f"[WARN] Failed to save job {job_id}: {e}")
+
+
+def _load_job_from_disk(job_id: str) -> Optional[Dict[str, Any]]:
+    path = JOBS_DIR / f"{job_id}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+
 class SearchRequest(BaseModel):
     username: str
     providers: Optional[List[str]] = None
@@ -228,16 +259,30 @@ async def api_search(req: SearchRequest):
         raise HTTPException(status_code=400, detail="username too long")
 
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"state": "running", "results": [], "username": username}
+    JOBS[job_id] = {
+        "id": job_id,
+        "ts": int(time.time()),
+        "state": "running",
+        "results": [],
+        "username": username,
+    }
+
+    def progress(res):
+        if job_id in JOBS:
+            JOBS[job_id]["results"].append(res.to_dict())
 
     async def runner():
         try:
-            res = await engine.scan_username(username, req.providers)
-            JOBS[job_id]["results"] = [r.to_dict() for r in res]
+            final_res = await engine.scan_username(
+                username, req.providers, progress_callback=progress
+            )
+            JOBS[job_id]["results"] = [r.to_dict() for r in final_res]
             JOBS[job_id]["state"] = "done"
         except Exception as e:
             JOBS[job_id]["state"] = "failed"
             JOBS[job_id]["error"] = str(e)
+        finally:
+            _save_job_to_disk(job_id)
 
     asyncio.create_task(runner())
     return {"job_id": job_id}
@@ -246,6 +291,12 @@ async def api_search(req: SearchRequest):
 @app.get("/api/jobs/{job_id}")
 async def api_job(job_id: str):
     job = JOBS.get(job_id)
+    if not job:
+        # try disk
+        job = _load_job_from_disk(job_id)
+        if job:
+            JOBS[job_id] = job
+
     if not job:
         raise HTTPException(status_code=404, detail="job not found")
     return job
@@ -263,7 +314,13 @@ async def api_face_search(
         raise HTTPException(status_code=400, detail="at least one file is required")
 
     job_id = str(uuid.uuid4())
-    JOBS[job_id] = {"state": "running", "results": [], "username": username}
+    JOBS[job_id] = {
+        "id": job_id,
+        "ts": int(time.time()),
+        "state": "running",
+        "results": [],
+        "username": username,
+    }
 
     # Create a temporary directory for the uploaded images
     temp_dir = APP_ROOT / "temp" / job_id
@@ -288,17 +345,25 @@ async def api_face_search(
 
     face_matcher_addon = FaceMatcherAddon(target_image_paths=image_paths)
 
+    def progress(res):
+        if job_id in JOBS:
+            JOBS[job_id]["results"].append(res.to_dict())
+
     async def runner():
         try:
-            res = await engine.scan_username(
-                username, dynamic_addons=[face_matcher_addon]
+            final_res = await engine.scan_username(
+                username,
+                dynamic_addons=[face_matcher_addon],
+                progress_callback=progress,
             )
-            JOBS[job_id]["results"] = [r.to_dict() for r in res]
+            JOBS[job_id]["results"] = [r.to_dict() for r in final_res]
             JOBS[job_id]["state"] = "done"
         except Exception as e:
             JOBS[job_id]["state"] = "failed"
             JOBS[job_id]["error"] = str(e)
         finally:
+            _save_job_to_disk(job_id)
+
             # Clean up the temporary files
             for path in image_paths:
                 try:
@@ -341,6 +406,8 @@ def _build_reverse_links(image_url: str) -> List[Dict[str, str]]:
             "name": "Yandex Images",
             "url": f"https://yandex.com/images/search?rpt=imageview&url={q}",
         },
+        {"name": "PimEyes (Manual Upload)", "url": "https://pimeyes.com/en"},
+        {"name": "FaceCheck.ID (Manual Upload)", "url": "https://facecheck.id/"},
     ]
 
 
@@ -356,6 +423,92 @@ async def api_reverse_image_links(req: ReverseImageReq):
     if not re.match(r"^https?://", image_url, re.I):
         raise HTTPException(status_code=400, detail="image_url must be http(s)")
     return {"links": _build_reverse_links(image_url)}
+
+
+@app.post("/api/reverse_image_upload")
+async def api_reverse_image_upload(request: Request, file: UploadFile = File(...)):
+    if not file:
+        raise HTTPException(status_code=400, detail="No file uploaded")
+
+    filename = (file.filename or "image.jpg").lower()
+    valid_exts = {".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"}
+    if not any(filename.endswith(ext) for ext in valid_exts):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid image extension. Use jpg, png, gif, webp, bmp.",
+        )
+
+    ext = Path(filename).suffix
+    safe_name = f"{uuid.uuid4()}{ext}"
+    out_path = UPLOADS_DIR / safe_name
+
+    try:
+        content = await file.read()
+        if len(content) > 10 * 1024 * 1024:  # 10MB limit
+            raise HTTPException(status_code=400, detail="File too large (>10MB)")
+
+        out_path.write_bytes(content)
+    except Exception as e:
+        print(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail="Failed to save file")
+
+    # Construct public URL
+    # Preference: Env Var > Settings > Request Base URL
+    public_base = (os.getenv("SOCIAL_HUNT_PUBLIC_URL") or "").strip()
+    if not public_base:
+        try:
+            public_base = str(settings_store.load().get("public_url") or "").strip()
+        except Exception:
+            pass
+
+    if not public_base:
+        public_base = str(request.base_url)
+
+    if not public_base.endswith("/"):
+        public_base += "/"
+
+    file_url = f"{public_base}uploads/{safe_name}"
+
+    # Heuristic check for private URLs (warns user if running locally without a tunnel)
+    is_private = any(
+        x in file_url
+        for x in ["localhost", "127.0.0.1", "0.0.0.0", "192.168.", "10.", "172.16."]
+    )
+
+    # If private, try to upload to catbox.moe (temporary hosting) so external tools can see it
+    if is_private:
+        try:
+            import httpx
+
+            print("[INFO] Private IP detected. Attempting upload to catbox.moe...")
+            async with httpx.AsyncClient() as client:
+                data = {"reqtype": "fileupload"}
+                files = {
+                    "fileToUpload": (
+                        filename,
+                        content,
+                        file.content_type or "application/octet-stream",
+                    )
+                }
+                resp = await client.post(
+                    "https://catbox.moe/user/api.php",
+                    data=data,
+                    files=files,
+                    timeout=30.0,
+                )
+                if resp.status_code == 200:
+                    c_url = resp.text.strip()
+                    if c_url.startswith("http"):
+                        file_url = c_url
+                        is_private = False  # Successfully publicly hosted
+        except Exception as e:
+            print(f"[WARN] Catbox upload failed: {e}")
+
+    return {
+        "links": _build_reverse_links(file_url),
+        "image_url": file_url,
+        "is_private_ip": is_private,
+    }
 
 
 # ---------------------------
@@ -480,8 +633,8 @@ async def api_plugin_upload(
 
 
 # ---- UI ----
-WEB_DIR = (APP_ROOT / "web").resolve()
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
 
 @app.get("/")

@@ -15,12 +15,26 @@
 
     <div
         id="faceSearchContainer"
-        style="display: none; margin-top: 8px; margin-left: 12px"
+        style="
+            display: none;
+            margin-top: 10px;
+            padding: 12px;
+            background: rgba(127, 127, 127, 0.1);
+            border-radius: 6px;
+        "
     >
-        <p class="muted" style="margin-bottom: 4px">
+        <p class="muted" style="margin-bottom: 6px">
             Select one or more images of the person you are looking for.
         </p>
-        <input id="faceImages" type="file" multiple accept="image/*" />
+        <input
+            id="faceImages"
+            type="file"
+            multiple
+            accept=".jpg,.jpeg,.png,.gif,.webp,.bmp"
+        />
+        <div class="muted" style="font-size: 0.8em; margin-top: 4px">
+            Supported: JPG, PNG, GIF, WEBP, BMP
+        </div>
     </div>
 
     <div class="row" style="margin-top: 8px">

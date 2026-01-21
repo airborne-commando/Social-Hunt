@@ -252,6 +252,41 @@ function renderResults(job) {
   `;
 }
 
+async function monitorJob(jobId) {
+  const statusEl = document.getElementById("status");
+  for (;;) {
+    await new Promise((r) => setTimeout(r, 1000));
+    const jr = await fetch(`/api/jobs/${jobId}`);
+    const job = await jr.json();
+
+    if (job.state === "done") {
+      if (statusEl) statusEl.textContent = "Done.";
+      markSearchHistory(jobId, {
+        state: "done",
+        results_count: (job.results || []).length,
+      });
+      renderResults(job);
+      return;
+    }
+    if (job.state === "failed") {
+      if (statusEl)
+        statusEl.textContent = "Failed: " + (job.error || "unknown");
+      markSearchHistory(jobId, {
+        state: "failed",
+        error: job.error || "unknown",
+      });
+      return;
+    }
+    if (statusEl)
+      statusEl.textContent = `Running... (${
+        (job.results || []).length
+      } results so far)`;
+    if (job.results && job.results.length > 0) {
+      renderResults(job);
+    }
+  }
+}
+
 async function startScan() {
   const usernameEl = document.getElementById("username");
   const statusEl = document.getElementById("status");
@@ -309,31 +344,32 @@ async function startScan() {
 
   statusEl.textContent = `Job ${jobId} running...`;
 
-  for (;;) {
-    await new Promise((r) => setTimeout(r, 1000));
-    const jr = await fetch(`/api/jobs/${jobId}`);
-    const job = await jr.json();
-
-    if (job.state === "done") {
-      statusEl.textContent = "Done.";
-      markSearchHistory(jobId, {
-        state: "done",
-        results_count: (job.results || []).length,
-      });
-      renderResults(job);
-      return;
-    }
-    if (job.state === "failed") {
-      statusEl.textContent = "Failed: " + (job.error || "unknown");
-      markSearchHistory(jobId, {
-        state: "failed",
-        error: job.error || "unknown",
-      });
-      return;
-    }
-    statusEl.textContent = `Running... (${(job.results || []).length} results so far)`;
-  }
+  await monitorJob(jobId);
 }
+
+window.loadJob = async function (jobId) {
+  await loadView("search");
+  const statusEl = document.getElementById("status");
+  if (statusEl) statusEl.textContent = `Loading job ${jobId}...`;
+
+  try {
+    const res = await fetch(`/api/jobs/${jobId}`);
+    if (!res.ok) throw new Error("Job not found");
+    const job = await res.json();
+
+    if (job.state === "running") {
+      if (statusEl) statusEl.textContent = `Job ${jobId} running...`;
+      renderResults(job);
+      await monitorJob(jobId);
+    } else {
+      renderResults(job);
+      if (statusEl)
+        statusEl.textContent = `Loaded job ${jobId} (${job.state}).`;
+    }
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "Error loading job: " + e.message;
+  }
+};
 
 async function initSearchView() {
   const loadBtn = document.getElementById("loadProviders");
@@ -392,30 +428,101 @@ function initReverseView() {
   const img = document.getElementById("imageUrl");
   const out = document.getElementById("reverseOut");
   const btn = document.getElementById("reverseGo");
+  const uploadBtn = document.getElementById("reverseUploadGo");
+  const uploadFile = document.getElementById("reverseUploadFile");
 
-  btn.onclick = async () => {
-    const image_url = img.value.trim();
-    if (!image_url) return alert("Paste an image URL.");
-
-    const r = await fetch("/api/reverse_image_links", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image_url }),
-    });
-
-    const j = await r.json().catch(() => ({}));
-    if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
-
-    // Save local history
-    addReverseHistoryEntry({ image_url, links: j.links || [] });
-
-    out.innerHTML = (j.links || [])
+  function render(links, previewUrl, warning) {
+    const linkHtml = (links || [])
       .map(
         (x) =>
           `<div class="linkrow"><a target="_blank" rel="noreferrer" href="${x.url}">${x.name}</a></div>`,
       )
       .join("");
-  };
+
+    let previewHtml = "";
+    if (previewUrl) {
+      previewHtml = `
+      <div style="margin-bottom:10px">
+        <a href="${previewUrl}" target="_blank">
+          <img src="${previewUrl}" style="max-height:100px;border-radius:4px;border:1px solid #444">
+        </a>
+        <div style="margin-top:8px; display:flex; gap:8px;">
+            <input type="text" readonly value="${escapeHtml(
+              previewUrl,
+            )}" style="flex:1; padding:4px;" onclick="this.select()">
+            <button class="btn small" onclick="navigator.clipboard.writeText(this.previousElementSibling.value).then(()=>alert('Copied!'))">Copy URL</button>
+        </div>
+        <p class="muted" style="font-size:0.8em; margin-top:4px">
+            Use "Copy URL" for manual uploads (PimEyes, FaceCheck.ID).
+        </p>
+      </div>`;
+    }
+
+    const warningHtml = warning
+      ? `<div class="warning" style="margin-bottom:10px; border:1px solid #c77; background:#411; padding:8px; border-radius:4px;">${escapeHtml(
+          warning,
+        )}</div>`
+      : "";
+
+    out.innerHTML = warningHtml + previewHtml + linkHtml;
+  }
+
+  if (btn) {
+    btn.onclick = async () => {
+      const image_url = img.value.trim();
+      if (!image_url) return alert("Paste an image URL.");
+
+      out.innerHTML = '<div class="muted">Searching...</div>';
+
+      const r = await fetch("/api/reverse_image_links", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_url }),
+      });
+
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
+
+      // Save local history
+      addReverseHistoryEntry({ image_url, links: j.links || [] });
+
+      render(j.links, image_url);
+    };
+  }
+
+  if (uploadBtn) {
+    uploadBtn.onclick = async () => {
+      const file = uploadFile?.files[0];
+      if (!file) return alert("Select an image file.");
+
+      out.innerHTML = '<div class="muted">Uploading...</div>';
+
+      const fd = new FormData();
+      fd.append("file", file);
+
+      const r = await fetch("/api/reverse_image_upload", {
+        method: "POST",
+        body: fd,
+      });
+
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        out.innerHTML = `<div class="danger">Error: ${escapeHtml(
+          j.detail || "Upload failed",
+        )}</div>`;
+        return;
+      }
+
+      // Save local history
+      addReverseHistoryEntry({ image_url: j.image_url, links: j.links || [] });
+
+      const warn = j.is_private_ip
+        ? "Warning: Your server appears to be on a private IP (localhost). External engines (Google Lens, etc.) cannot download this image. Use a public URL or a tunnel."
+        : null;
+
+      render(j.links, j.image_url, warn);
+    };
+  }
 }
 
 // ----------------------
@@ -451,12 +558,20 @@ function initHistoryView() {
           const results =
             (x.results_count ?? "") +
             (x.state ? ` (${escapeHtml(x.state)})` : "");
+
+          let action = escapeHtml(String(results));
+          if (x.job_id) {
+            action += ` <button class="btn small" style="margin-left:10px" onclick="loadJob('${escapeHtml(
+              x.job_id,
+            )}')">View</button>`;
+          }
+
           return `<tr>
           <td>${escapeHtml(fmtWhen(x.ts))}</td>
           <td>${escapeHtml(x.username || "")}</td>
           <td>${escapeHtml(String(providers))}</td>
           <td>${job}</td>
-          <td>${escapeHtml(String(results))}</td>
+          <td>${action}</td>
         </tr>`;
         })
         .join("");
@@ -626,6 +741,8 @@ function initSettingsView() {
   const saveBtn = document.getElementById("settingsSave");
   const reloadBtn = document.getElementById("settingsReload");
   const msgEl = document.getElementById("settingsMsg");
+  const publicUrlInput = document.getElementById("public_url");
+  const savePublicUrlBtn = document.getElementById("saveSettings");
 
   function showMsg(txt) {
     msgEl.style.display = "block";
@@ -666,7 +783,13 @@ function initSettingsView() {
     }
 
     const settings = j.settings || {};
+
+    if (settings.public_url && publicUrlInput) {
+      publicUrlInput.value = settings.public_url.value || "";
+    }
+
     for (const [k, meta] of Object.entries(settings)) {
+      if (k === "public_url") continue;
       tableBody.insertAdjacentHTML(
         "beforeend",
         rowHtml(k, meta.value, meta.secret, meta.is_set),
@@ -713,6 +836,24 @@ function initSettingsView() {
   };
 
   reloadBtn.onclick = load;
+
+  if (savePublicUrlBtn) {
+    savePublicUrlBtn.onclick = async () => {
+      const val = publicUrlInput.value.trim();
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ settings: { public_url: val } }),
+      });
+
+      if (r.ok) {
+        alert("Public URL saved.");
+        load();
+      } else {
+        alert("Failed to save.");
+      }
+    };
+  }
 
   load();
 }

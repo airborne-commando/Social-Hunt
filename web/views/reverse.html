@@ -1,10 +1,45 @@
-<h2>Reverse Image</h2>
-<p class="muted">Generate one-click links to external reverse-image engines (Google Images / Lens / TinEye / Bing / Yandex).</p>
+<h2>Reverse Image Search</h2>
+<p class="muted">
+    Find where an image appears online using external engines (Google, Bing,
+    Yandex, TinEye, etc).
+</p>
 
-<div class="card">
-  <div class="row">
-    <input id="imageUrl" placeholder="https://example.com/image.jpg" />
-    <button class="btn good" id="reverseGo" type="button">Generate</button>
-  </div>
-  <div id="reverseOut" style="margin-top:12px; display:grid; gap:8px"></div>
+<div class="grid">
+    <!-- URL Option -->
+    <div class="card half">
+        <h3>Option 1: Image URL</h3>
+        <p class="muted">Paste a direct link to an image.</p>
+        <div class="row">
+            <input id="imageUrl" placeholder="https://example.com/image.jpg" />
+            <button class="btn" id="reverseGo" type="button">Search URL</button>
+        </div>
+    </div>
+
+    <!-- Upload Option -->
+    <div class="card half">
+        <h3>Option 2: Upload Image</h3>
+        <p class="muted">
+            Upload a file from your device (temporarily hosted).
+        </p>
+        <div class="row">
+            <input
+                id="reverseUploadFile"
+                type="file"
+                accept=".jpg,.jpeg,.png,.gif,.webp,.bmp"
+            />
+            <button class="btn" id="reverseUploadGo" type="button">
+                Upload & Search
+            </button>
+        </div>
+        <div class="muted" style="font-size: 0.8em; margin-top: 4px">
+            Supported: JPG, PNG, GIF, WEBP, BMP
+        </div>
+    </div>
+</div>
+
+<div class="card" style="margin-top: 20px">
+    <h3>Results</h3>
+    <div id="reverseOut" style="margin-top: 12px; display: grid; gap: 8px">
+        <div class="muted">Links will appear here...</div>
+    </div>
 </div>

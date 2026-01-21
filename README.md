@@ -25,6 +25,11 @@
         * Perceptual image hashing for default/generic avatars
     * **HIBP Integration:** Check breach exposure via Have I Been Pwned API
     * **Network Safety:** URL validation and content-type checking
+* **Reverse Image Search:**
+    * **Upload Support:** Upload images directly to search on Google Lens, Bing, Yandex, PimEyes, and FaceCheck.ID.
+    * **Public URL Handling:** Auto-configures accessible URLs for external search engines even when running locally.
+* **Persistent History:**
+    * **Save & Resume:** Search jobs are saved to disk (`data/jobs/`). You can pull up previous results anytime from the History tab.
 
 ---
 
@@ -208,6 +213,8 @@ class NewSiteProvider(BaseProvider):
 * **Secure Login System:** Token-based authentication for web dashboard
 * **Enhanced Metadata Extraction:** Improved parsing with suppressed false-positive warnings
 * **Dual Avatar Matching:** Face recognition + image hashing for comprehensive profile matching
+* **Reverse Image Upgrades:** Added upload support, public URL configuration, and PimEyes/FaceCheck.ID links.
+* **Job History:** Full persistence for search jobs with "View" playback support.
 * **Better Error Handling:** More descriptive error messages for debugging
 * **Cleaner Logs:** Reduced console spam from HTML parsing warnings
 * **Installation Updates:** Added `python-multipart` and setuptools upgrade (Credit: airborne-commando for finding and testing)

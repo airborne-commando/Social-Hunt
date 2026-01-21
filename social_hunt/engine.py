@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 
 import httpx
 
@@ -31,6 +31,7 @@ class SocialHuntEngine:
         username: str,
         providers: Optional[List[str]] = None,
         dynamic_addons: Optional[List[BaseAddon]] = None,
+        progress_callback: Optional[Callable[[ProviderResult], None]] = None,
     ) -> List[ProviderResult]:
         if providers:
             chosen = [p for p in providers if p in self.registry]
@@ -54,7 +55,10 @@ class SocialHuntEngine:
                 await self.limiter.wait(url)
 
                 async with sem:
-                    return await prov.check(username, client, headers)
+                    res = await prov.check(username, client, headers)
+                    if progress_callback:
+                        progress_callback(res)
+                    return res
 
             tasks = [asyncio.create_task(run_one(p)) for p in chosen]
             results = await asyncio.gather(*tasks)
