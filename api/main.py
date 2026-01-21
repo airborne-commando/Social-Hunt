@@ -42,6 +42,18 @@ settings_store = SettingsStore(str(SETTINGS_PATH))
 PROVIDERS_YAML = _resolve_env_path("SOCIAL_HUNT_PROVIDERS_YAML", "providers.yaml")
 
 
+@app.on_event("startup")
+async def on_startup():
+    print(f"[INFO] Settings path: {SETTINGS_PATH}")
+    env_token = (os.getenv("SOCIAL_HUNT_PLUGIN_TOKEN") or "").strip()
+    if env_token:
+        print(
+            "[INFO] Admin token loaded from SOCIAL_HUNT_PLUGIN_TOKEN (env var). This overrides settings.json."
+        )
+    else:
+        print("[INFO] Admin token loaded from settings.json.")
+
+
 # ---- auth (simple admin token) ----
 # Priority order:
 #   1) SOCIAL_HUNT_PLUGIN_TOKEN env var (recommended for production)

@@ -6,15 +6,18 @@
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+python -m pip install -U pip setuptools
 pip install -r requirements.txt
+pip install python-multipart
 ```
 
 ### Windows (PowerShell)
 ```powershell
 py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-python -m pip install -U pip
+python -m pip install -U pip setuptools
 pip install -r requirements.txt
+pip install python-multipart
 ```
 
 **If activation blocked:**
