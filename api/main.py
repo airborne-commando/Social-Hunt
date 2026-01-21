@@ -408,6 +408,7 @@ def _build_reverse_links(image_url: str) -> List[Dict[str, str]]:
         },
         {"name": "PimEyes (Manual Upload)", "url": "https://pimeyes.com/en"},
         {"name": "FaceCheck.ID (Manual Upload)", "url": "https://facecheck.id/"},
+        {"name": "Face-Spy (Manual Upload)", "url": "https://face-spy.com/"},
     ]
 
 
