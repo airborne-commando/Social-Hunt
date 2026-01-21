@@ -255,7 +255,7 @@ Linktree:
   url: "https://linktr.ee/{username}"
   timeout: 10
   ua_profile: "desktop_chrome"
-  success_patterns: "{username}"
+  success_patterns: ["{username}"]
   error_patterns: ["The page you're looking for doesn't exist.","Want this to be your username? Create your Linktree now."]
   note: "Linktree links"
 
@@ -263,6 +263,6 @@ allmylinks:
   url: "https://allmylinks.com/{username}"
   timeout: 10
   ua_profile: "desktop_chrome"
-  success_patterns: "{username}"
+  success_patterns: ["{username}"]
   error_patterns: "404"
   note: "allmylinks links"
