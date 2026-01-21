@@ -241,3 +241,28 @@ signal:
   success_patterns: ["signal"]
   error_patterns: []
   note: "Link generation only. Verification not possible via web."
+
+reddit archive:
+  url: "https://ihsoyct.github.io/?backend=artic_shift&mode=submissions&author={username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["Posted by"]
+  error_patterns: []
+  note: "Reddit archive for deleted/active accounts, may not all be archived. Doesn't hurt to see if reddit shows not_found"
+
+
+Linktree:
+  url: "https://linktr.ee/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: "{username}"
+  error_patterns: ["The page you're looking for doesn't exist.","Want this to be your username? Create your Linktree now."]
+  note: "Linktree links"
+
+allmylinks:
+  url: "https://allmylinks.com/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: "{username}"
+  error_patterns: "404"
+  note: "allmylinks links"
