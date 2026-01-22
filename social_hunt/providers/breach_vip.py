@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import Dict, Any, List
+from typing import Any, Dict, List
 
 from ..providers_base import BaseProvider
 from ..types import ProviderResult, ResultStatus
@@ -12,13 +12,13 @@ class BreachVIPProvider(BaseProvider):
     """BreachVIP breach data search provider.
 
     Searches for data across multiple fields in the BreachVIP database.
-    
+
     Input:
       - Username/Email/Phone/DiscordID/etc: searches across relevant fields
-    
+
     Rate limit: 15 requests per minute
     Maximum results: 10,000 per search
-    
+
     Note: No API key required based on the OpenAPI documentation.
     """
 
@@ -29,7 +29,9 @@ class BreachVIPProvider(BaseProvider):
     def build_url(self, username: str) -> str:
         return "https://breach.vip/api/search"
 
-    async def check(self, username: str, client, headers: Dict[str, str]) -> ProviderResult:
+    async def check(
+        self, username: str, client, headers: Dict[str, str]
+    ) -> ProviderResult:
         start = time.monotonic()
         ts = datetime.now(timezone.utc).isoformat()
 
@@ -51,21 +53,21 @@ class BreachVIPProvider(BaseProvider):
         # Prepare request headers
         breachvip_headers = dict(headers)
         breachvip_headers["Content-Type"] = "application/json"
-        
+
         # Determine which fields to search based on the input
         fields_to_search = self._determine_search_fields(search_term)
-        
+
         request_body = {
             "term": search_term,
             "fields": fields_to_search,
             "categories": None,  # Only minecraft supported for now
             "wildcard": False,
-            "case_sensitive": False
+            "case_sensitive": False,
         }
 
         profile: Dict[str, Any] = {
             "account": search_term,
-            "fields_searched": fields_to_search
+            "fields_searched": fields_to_search,
         }
         evidence: Dict[str, Any] = {"breachvip": True}
 
@@ -74,18 +76,18 @@ class BreachVIPProvider(BaseProvider):
                 self.build_url(username),
                 timeout=self.timeout,
                 headers=breachvip_headers,
-                json=request_body
+                json=request_body,
             )
-            
+
             elapsed = int((time.monotonic() - start) * 1000)
-            
+
             if response.status_code == 200:
                 data = response.json() if response.text else []
-                
+
                 if isinstance(data, list) and data:
                     # Found results
                     result_count = len(data)
-                    
+
                     # Extract unique breach sources if available
                     breach_sources = set()
                     for result in data:
@@ -94,26 +96,28 @@ class BreachVIPProvider(BaseProvider):
                             for field in ["source", "breach", "database", "origin"]:
                                 if field in result and result[field]:
                                     breach_sources.add(str(result[field]))
-                    
+
                     profile["result_count"] = result_count
                     if breach_sources:
                         profile["breach_sources"] = list(breach_sources)
-                    
+
                     # Get a summary of what types of data were found
                     data_types_found = {}
                     for result in data[:10]:  # Check first 10 results
                         if isinstance(result, dict):
                             for key, value in result.items():
                                 if value and key not in ["_id", "id", "index"]:
-                                    data_types_found[key] = data_types_found.get(key, 0) + 1
-                    
+                                    data_types_found[key] = (
+                                        data_types_found.get(key, 0) + 1
+                                    )
+
                     if data_types_found:
                         profile["data_types"] = data_types_found
-                    
+
                     # Check if we hit the 10k limit
                     if result_count >= 10000:
                         profile["note"] = "Result limit reached (10,000+)"
-                    
+
                     return ProviderResult(
                         provider=self.name,
                         username=username,
@@ -138,7 +142,7 @@ class BreachVIPProvider(BaseProvider):
                         profile=profile,
                         timestamp_iso=ts,
                     )
-                    
+
             elif response.status_code == 400:
                 return ProviderResult(
                     provider=self.name,
@@ -152,7 +156,7 @@ class BreachVIPProvider(BaseProvider):
                     error="Bad request - check search parameters",
                     timestamp_iso=ts,
                 )
-                
+
             elif response.status_code == 405:
                 return ProviderResult(
                     provider=self.name,
@@ -166,7 +170,7 @@ class BreachVIPProvider(BaseProvider):
                     error="Method not allowed",
                     timestamp_iso=ts,
                 )
-                
+
             elif response.status_code == 429:
                 return ProviderResult(
                     provider=self.name,
@@ -180,7 +184,7 @@ class BreachVIPProvider(BaseProvider):
                     error="Rate limited (15 requests/minute) - wait 1 minute",
                     timestamp_iso=ts,
                 )
-                
+
             elif response.status_code == 500:
                 return ProviderResult(
                     provider=self.name,
@@ -194,7 +198,7 @@ class BreachVIPProvider(BaseProvider):
                     error="Internal server error",
                     timestamp_iso=ts,
                 )
-                
+
             else:
                 return ProviderResult(
                     provider=self.name,
@@ -208,7 +212,7 @@ class BreachVIPProvider(BaseProvider):
                     error=f"Unexpected response ({response.status_code})",
                     timestamp_iso=ts,
                 )
-                
+
         except Exception as e:
             elapsed = int((time.monotonic() - start) * 1000)
             return ProviderResult(
@@ -228,41 +232,47 @@ class BreachVIPProvider(BaseProvider):
         """Determine which fields to search based on the input type."""
         # Start with the most common fields
         fields = ["username", "email", "name"]
-        
+
         # Check for email pattern
         if "@" in search_term and "." in search_term:
             # It's likely an email, prioritize email field
             fields = ["email", "username", "name"]
-        
+
         # Check for domain pattern (has dots but no @)
         elif "." in search_term and "@" not in search_term:
             fields.append("domain")
-            
+
         # Check for phone number pattern
-        clean_term = search_term.replace("+", "").replace("-", "").replace(" ", "").replace("(", "").replace(")", "")
+        clean_term = (
+            search_term.replace("+", "")
+            .replace("-", "")
+            .replace(" ", "")
+            .replace("(", "")
+            .replace(")", "")
+        )
         if clean_term.isdigit() and 7 <= len(clean_term) <= 15:
             fields.append("phone")
-            
+
         # Check for Discord ID (18-19 digits)
         if search_term.isdigit() and 17 <= len(search_term) <= 20:
             fields.append("discordid")
-            
+
         # Check for UUID pattern
         if len(search_term) == 36 and "-" in search_term:
             fields.append("uuid")
-            
+
         # Check for IP address pattern
         if "." in search_term and search_term.count(".") == 3:
             parts = search_term.split(".")
             if all(part.isdigit() and 0 <= int(part) <= 255 for part in parts):
                 fields.append("ip")
-        
+
         # Always include password field for completeness
         fields.append("password")
-        
+
         # Remove duplicates and ensure we have at most 10 fields (API limit)
         unique_fields = list(dict.fromkeys(fields))[:10]
-        
+
         return unique_fields
 
 
