@@ -49,6 +49,7 @@ Social-Hunt is built with a modern, decoupled architecture:
 git clone https://github.com/AfterPacket/Social-Hunt.git
 
 cd Social-Hunt/docker
+
 docker-compose up -d --build
 ```
 Access the dashboard at `http://localhost:8000`.
