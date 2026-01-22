@@ -1,0 +1,33 @@
+version: "3.8"
+
+services:
+  social-hunt:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: social-hunt
+    ports:
+      - "8000:8000"
+    environment:
+      # The admin token used to log into the dashboard and protect settings.
+      # Change this to a secure random string.
+      - SOCIAL_HUNT_PLUGIN_TOKEN=your_secure_token_here
+
+      # Set to 1 to allow uploading new YAML or Python plugins via the Web UI.
+      - SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1
+
+      # Set to 1 to enable "Bootstrap Mode" which allows setting the admin
+      # token via the Web UI if one isn't already configured.
+      - SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP=0
+
+    volumes:
+      # Persist search history, settings, and job results
+      - ../data:/app/data
+
+      # Persist custom YAML and Python plugins
+      - ../plugins:/app/plugins
+
+      # Optional: persist temporary uploads for reverse image search
+      - ../web/temp_uploads:/app/web/temp_uploads
+
+    restart: unless-stopped

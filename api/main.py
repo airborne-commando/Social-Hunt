@@ -181,12 +181,18 @@ async def api_admin_update(
     """
     require_admin(x_plugin_token)
     try:
-        # Ensure data/settings.json is ignored if it exists in the index
-        subprocess.run(
-            ["git", "update-index", "--assume-unchanged", "data/settings.json"],
-            cwd=str(APP_ROOT),
-            capture_output=True,
-        )
+        # Protect local configuration and Docker files from being overwritten during pull
+        to_protect = [
+            "data/settings.json",
+            "docker/Dockerfile",
+            "docker/docker-compose.yml",
+        ]
+        for path in to_protect:
+            subprocess.run(
+                ["git", "update-index", "--assume-unchanged", path],
+                cwd=str(APP_ROOT),
+                capture_output=True,
+            )
 
         proc = subprocess.run(
             ["git", "pull"], cwd=str(APP_ROOT), capture_output=True, text=True

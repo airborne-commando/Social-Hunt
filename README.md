@@ -42,9 +42,18 @@ Social-Hunt is built with a modern, decoupled architecture:
 ### Prerequisites
 *   Python 3.9+
 *   `pip` (Python package manager)
+*   **Docker & Docker Compose** (Optional)
 
-### Installation
-1.  **Clone the Repository:**
+### Option 1: Docker (Recommended)
+```bash
+git clone https://github.com/your-repo/Social-Hunt.git
+cd Social-Hunt/docker
+docker-compose up -d --build
+```
+Access the dashboard at `http://localhost:8000`.
+
+### Option 2: Manual Installation
+1.  **Clone and Navigate:**
     ```bash
     git clone https://github.com/your-repo/Social-Hunt.git
     cd Social-Hunt

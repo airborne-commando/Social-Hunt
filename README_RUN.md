@@ -98,22 +98,25 @@ Social-Hunt is fully containerized for easy deployment.
 
 ### 1. Build and Start
 ```bash
+cd docker
 docker-compose up -d --build
 ```
 
-### 2. Docker Compose Configuration (`docker-compose.yml`)
+### 2. Docker Compose Configuration (`docker/docker-compose.yml`)
 ```yaml
 services:
   social-hunt:
-    build: .
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
     ports:
       - "8000:8000"
     environment:
       - SOCIAL_HUNT_PLUGIN_TOKEN=your_secure_token
       - SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1
     volumes:
-      - ./data:/app/data
-      - ./plugins:/app/plugins
+      - ../data:/app/data
+      - ../plugins:/app/plugins
 ```
 
 ---
