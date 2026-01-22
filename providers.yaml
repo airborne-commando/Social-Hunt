@@ -285,9 +285,150 @@ chaturbate:
   success_patterns: ["Room is currently offline."]
   error_patterns:
     [
-      "HTTP 404 - Page Not Found",
+      "HTTP 44 - Page Not Found",
       "It's probably just a broken link, or perhaps a cancelled broadcaster.",
     ]
+
+vk:
+  url: "https://vk.com/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["subscribers", "friends", "followers"]
+  error_patterns: ["this page is unavailable", "page not found"]
+
+tinder:
+  url: "https://tinder.com/@{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["profile", "distance", "interests"]
+  error_patterns: ["looking for someone else", "page not found"]
+
+quora:
+  url: "https://www.quora.com/profile/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["answers", "questions", "followers"]
+  error_patterns: ["page doesn't exist", "page not found"]
+
+hacker_news:
+  url: "https://news.ycombinator.com/user?id={username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["karma:", "created:", "submissions"]
+  error_patterns: ["no such user", "user not found"]
+
+last_fm:
+  url: "https://www.last.fm/user/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["scrobbles", "artists", "albums"]
+  error_patterns: ["user not found", "page not found"]
+
+chess_com:
+  url: "https://www.chess.com/member/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["stats", "rating", "joined"]
+  error_patterns: ["page not found", "account closed"]
+
+letterboxd:
+  url: "https://letterboxd.com/{username}/"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["films", "diary", "reviews"]
+  error_patterns: ["sorry, we can't find that page", "page not found"]
+
+kofi:
+  url: "https://ko-fi.com/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["support", "commission", "gallery"]
+  error_patterns: ["page not found", "couldn't find that page"]
+
+buymeacoffee:
+  url: "https://www.buymeacoffee.com/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["buy", "support", "membership"]
+  error_patterns: ["page not found", "user not found"]
+
+cash_app:
+  url: "https://cash.app/${username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["pay", "request", "cashtag"]
+  error_patterns: ["not a valid cashtag", "page not found"]
+
+dribbble:
+  url: "https://dribbble.com/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["shots", "followers", "following"]
+  error_patterns: ["whoops, that page is gone", "page not found"]
+
+product_hunt:
+  url: "https://www.producthunt.com/@{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["upvoted", "maker", "following"]
+  error_patterns: ["we couldn't find the page you're looking for", "page not found"]
+
+angel_list:
+  url: "https://angel.co/u/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["investor", "founder", "profile"]
+  error_patterns: ["page not found", "couldn't find that page"]
+
+epic_games:
+  url: "https://store.epicgames.com/en-US/u/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["profile", "display name", "account level"]
+  error_patterns: ["page not found", "404"]
+
+gog:
+  url: "https://www.gog.com/u/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["profile", "games", "reviews"]
+  error_patterns: ["page not found", "user not found"]
+
+xing:
+  url: "https://www.xing.com/profile/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["profile", "contacts", "portfolio"]
+  error_patterns: ["profile could not be found", "page not found"]
+
+weibo:
+  url: "https://www.weibo.com/n/{username}"
+  timeout: 15
+  ua_profile: "desktop_chrome"
+  success_patterns: ["followers", "关注", "粉丝"] # Chinese for "following" and "fans"
+  error_patterns: ["oops, page not found", "用户不存在"] # Chinese for "user does not exist"
+  note: "Results may be unreliable due to bot protection."
+
+geocaching:
+  url: "https://www.geocaching.com/p/default.aspx?u={username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["geocacher", "finds", "hides"]
+  error_patterns: ["user not found", "player does not exist"]
+
+instructables:
+  url: "https://www.instructables.com/member/{username}/"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["instructables", "followers", "following"]
+  error_patterns: ["page not found", "member does not exist"]
+
+keybase:
+  url: "https://keybase.io/{username}"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["proofs", "following", "followers"]
+  error_patterns: ["user not found", "s/he does not exist"]
 
 vk:
   url: "https://vk.com/{username}"
