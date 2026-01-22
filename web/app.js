@@ -62,7 +62,7 @@ const KEY_REVERSE_HISTORY = "socialhunt_reverse_history";
 function loadJsonArray(key) {
   try {
     const raw = localStorage.getItem(key);
-    const v = JSON.parse(raw);
+    const v = raw ? JSON.parse(raw) : [];
     return Array.isArray(v) ? v : [];
   } catch (_) {
     return [];
@@ -109,50 +109,58 @@ function addReverseHistoryEntry({ image_url, links }) {
 // Dashboard
 // ----------------------
 function initDashboardView() {
-  const last = localStorage.getItem("socialhunt_last_job");
+  const last = localStorage.getItem("socialhunt_last_job") || "";
   const el = document.getElementById("lastJob");
-  if (last && el) {
-    el.innerHTML = `Last job: ${escapeHtml(
-      last,
-    )} <button id="loadLastJob" class="btn small">Load</button>`;
-    const go = document.getElementById("loadLastJob");
-    if (go) go.onclick = () => window.loadJob(last);
-  }
+  if (el) el.textContent = last ? last : "(none yet)";
+
+  const go = document.getElementById("goSearch");
+  if (go) go.onclick = () => loadView("search");
 }
 
 // ----------------------
 // Search
 // ----------------------
 function badge(status) {
-  return `<span class="badge ${status}">${escapeHtml(status)}</span>`;
+  return `<span class="badge">${status}</span>`;
 }
+
 async function fetchProviders() {
   const res = await fetch("/api/providers");
   const data = await res.json();
   return data.providers || [];
 }
+
 async function fetchWhoami() {
   try {
     const res = await fetch("/api/whoami");
+    if (!res.ok) return null;
     const data = await res.json();
     return data;
   } catch (_) {
     return null;
   }
 }
-function renderProviders(providers) {
+
+function renderProviders(names) {
   const box = document.getElementById("providers");
-  box.innerHTML = (providers || [])
+  box.innerHTML = names
     .map(
-      (p) =>
-        `<label class="provider"><input type="checkbox" data-name="${p}"><span>${p}</span></label>`,
+      (n) => `
+    <label class="provider">
+      <input type="checkbox" data-name="${n}" checked />
+      <span>${n}</span>
+    </label>
+  `,
     )
     .join("");
 }
+
 function selectedProviders() {
-  return [
-    ...document.querySelectorAll('input[type="checkbox"][data-name]:checked'),
-  ].map((x) => x.dataset.name);
+  return Array.from(
+    document.querySelectorAll('input[type="checkbox"][data-name]'),
+  )
+    .filter((x) => x.checked)
+    .map((x) => x.getAttribute("data-name"));
 }
 
 function renderResults(job, containerId) {
@@ -163,7 +171,6 @@ function renderResults(job, containerId) {
   }
 
   const results = job.results || [];
-
   const rows = results
     .map((r) => {
       const prof = r.profile || {};
@@ -171,38 +178,49 @@ function renderResults(job, containerId) {
         prof.avatar_url && prof.avatar_url !== "undefined"
           ? `<img src="${prof.avatar_url}" alt="" class="avatar"/>`
           : "";
-      const name = escapeHtml(prof.display_name || "");
-      const followers = escapeHtml(String(prof.followers ?? ""));
-      const following = escapeHtml(String(prof.following ?? ""));
-      const created = escapeHtml(prof.created_at || "");
+      const name = prof.display_name ? `${prof.display_name}` : "";
+      const followers = prof.followers ?? prof.subscribers ?? "";
+      const following = prof.following ?? "";
+      const created = prof.created_at ?? "";
       const link = r.url
         ? `<a href="${r.url}" target="_blank" rel="noreferrer">${r.url}</a>`
         : "";
       const err = r.error
-        ? `<div class="danger" style="margin-top:6px">${escapeHtml(r.error)}</div>`
+        ? `<div class="muted">${escapeHtml(r.error)}</div>`
         : "";
 
       const notes = [];
-      if (prof.bio) notes.push(prof.bio);
-      if (prof.note) notes.push(prof.note);
-      if (prof.result_count) notes.push(`Results: ${prof.result_count}`);
-      if (prof.breach_sources)
-        notes.push(`Sources: ${prof.breach_sources.join(", ")}`);
-
-      if (r.face_match) {
-        if (r.face_match.match) {
-          notes.push("FACE MATCH");
-        } else {
+      if (typeof prof.breach_count === "number") {
+        notes.push(`breaches: ${prof.breach_count}`);
+        if (Array.isArray(prof.breaches) && prof.breaches.length) {
           notes.push(
-            `NO FACE MATCH (reason: ${r.face_match.reason || "unknown"})`,
+            `(${prof.breaches.slice(0, 6).join(", ")}${
+              prof.breaches.length > 6 ? "…" : ""
+            })`,
           );
         }
       }
-      if (r.face_match_error) {
-        notes.push(`FACE SEARCH ERROR: ${r.face_match_error}`);
+      if (typeof prof.paste_count === "number")
+        notes.push(`pastes: ${prof.paste_count}`);
+      if (prof.note) notes.push(String(prof.note));
+      if (prof.pastes_note) notes.push(String(prof.pastes_note));
+      if (prof.pastes_error) notes.push(`pastes: ${prof.pastes_error}`);
+      if (prof.face_match) {
+        if (prof.face_match.match) {
+          notes.push("FACE MATCH");
+        } else {
+          notes.push(
+            `NO FACE MATCH (reason: ${prof.face_match.reason || "unknown"})`,
+          );
+        }
+      }
+      if (prof.face_match_error) {
+        notes.push(`FACE SEARCH ERROR: ${prof.face_match_error}`);
       }
       const noteHtml = notes.length
-        ? `<div class="muted" style="margin-top:6px">${escapeHtml(notes.join(" "))}</div>`
+        ? `<div class="muted" style="margin-top:6px">${escapeHtml(
+            notes.join(" "),
+          )}</div>`
         : "";
       return `
       <tr>
@@ -666,80 +684,76 @@ function initHistoryView() {
       render();
     };
   }
-
   if (clearReverse) {
     clearReverse.onclick = () => {
       localStorage.removeItem(KEY_REVERSE_HISTORY);
       render();
     };
   }
-
-  if (refreshBtn) {
-    refreshBtn.onclick = render;
-  }
+  if (refreshBtn) refreshBtn.onclick = render;
 
   render();
 }
 
 // ----------------------
-// Tokens
+// Token
 // ----------------------
 function initTokensView() {
   const input = document.getElementById("tokenInput");
   const save = document.getElementById("tokenSave");
   const clear = document.getElementById("tokenClear");
 
-  const statusEl = document.getElementById("adminTokenStatus");
-  const serverTokenInput = document.getElementById("serverToken");
-  const bootstrapSecretInput = document.getElementById("bootstrapSecret");
+  const statusEl = document.getElementById("adminStatus");
+  const serverTokenInput = document.getElementById("serverTokenInput");
+  const bootstrapSecretInput = document.getElementById("bootstrapSecretInput");
   const serverTokenSet = document.getElementById("serverTokenSet");
 
   input.value = getToken() || "";
+  save.onclick = () => setToken(input.value.trim());
   clear.onclick = () => {
     input.value = "";
     setToken("");
   };
 
   async function loadStatus() {
-    if (!statusEl) return;
-    statusEl.textContent = "Loading...";
-    const r = await fetch("/api/admin/status", { cache: "no-store" });
-    const j = await r.json();
-    statusEl.innerHTML = `
-      Admin token is ${j.admin_token_set ? "SET" : "NOT SET"}<br>
-      Source: ${j.admin_token_source}<br>
-      Web plugin uploads: ${
-        j.web_plugin_upload_enabled ? "ENABLED" : "DISABLED"
-      }<br>
-      Bootstrap (env): ${j.bootstrap_env_enabled ? "ENABLED" : "DISABLED"}<br>
-      Bootstrap (secret): ${
-        j.bootstrap_secret_required ? "REQUIRED" : "NOT SET"
+    try {
+      const r = await fetch("/api/admin/status", { cache: "no-store" });
+      const j = await r.json().catch(() => ({}));
+      if (statusEl) statusEl.textContent = JSON.stringify(j, null, 2);
+
+      // If bootstrap secret is not required, hide the field to reduce confusion
+      if (bootstrapSecretInput && !j.bootstrap_secret_required) {
+        bootstrapSecretInput.style.display = "none";
       }
-    `;
+    } catch (e) {
+      if (statusEl) statusEl.textContent = "Failed to load status.";
+    }
   }
 
-  save.onclick = async () => {
-    const newTok = input.value.trim();
-    if (!newTok) return alert("Enter a token.");
-    setToken(newTok);
+  if (serverTokenSet) {
+    serverTokenSet.onclick = async () => {
+      const newTok = (serverTokenInput?.value || "").trim();
+      if (!newTok) return alert("Enter a new server admin token.");
 
-    const headers = { "Content-Type": "application/json" };
-    const boot = bootstrapSecretInput.value.trim();
-    if (boot) headers["X-Bootstrap-Secret"] = boot;
+      const headers = authHeaders({ "Content-Type": "application/json" });
+      const boot = (bootstrapSecretInput?.value || "").trim();
+      if (boot) headers["X-Bootstrap-Secret"] = boot;
 
-    const r = await fetch("/api/admin/token", {
-      method: "PUT",
-      headers: authHeaders(headers),
-      body: JSON.stringify({ token: newTok }),
-    });
-    const j = await r.json().catch(() => ({}));
-    if (r.ok) {
-      alert("Token saved. This will be used for future API requests.");
-      loadStatus();
-    } else {
-      alert("Failed: " + (j.detail || "Unknown error"));
-    }
-  };
+      const r = await fetch("/api/admin/token", {
+        method: "PUT",
+        headers,
+        body: JSON.stringify({ token: newTok }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return alert(j.detail || `Failed (${r.status})`);
+
+      // Store locally too so the next privileged request works
+      setToken(newTok);
+      input.value = newTok;
+      alert("Server token set.");
+      await loadStatus();
+    };
+  }
 
   loadStatus();
 }
@@ -753,13 +767,14 @@ function initPluginsView() {
   const reloadBtn = document.getElementById("pluginReload");
   const outEl = document.getElementById("pluginOut");
 
-  function setOut(txt, isErr) {
-    outEl.textContent = txt;
-    outEl.className = isErr ? "danger" : "";
+  function setOut(msg) {
+    if (outEl) outEl.textContent = msg;
   }
 
   uploadBtn.onclick = async () => {
-    if (!fileEl.files.length) return setOut("Select a file.", true);
+    if (!getToken()) return alert("Set token first (Token page).");
+    if (!fileEl.files?.length) return alert("Choose a plugin file.");
+
     const fd = new FormData();
     fd.append("file", fileEl.files[0]);
 
@@ -768,33 +783,30 @@ function initPluginsView() {
       headers: authHeaders(),
       body: fd,
     });
+
     const j = await r.json().catch(() => ({}));
-    if (r.ok) {
-      setOut(
-        `Installed: ${j.installed.join(", ") || "none"}. Total providers: ${
-          (j.providers || []).length
-        }.`,
-      );
-    } else setOut(j.detail || `Upload failed (${r.status})`, true);
+    if (!r.ok) return alert(j.detail || `Upload failed (${r.status})`);
+
+    setOut(JSON.stringify(j, null, 2));
   };
 
   reloadBtn.onclick = async () => {
+    if (!getToken()) return alert("Set token first (Token page).");
     const r = await fetch("/api/providers/reload", {
       method: "POST",
       headers: authHeaders({ "Content-Type": "application/json" }),
     });
     const j = await r.json().catch(() => ({}));
-    if (r.ok)
-      setOut(`Reloaded. Total providers: ${(j.providers || []).length}.`);
-    else setOut(j.detail || `Reload failed (${r.status})`, true);
+    if (!r.ok) return alert(j.detail || `Reload failed (${r.status})`);
+    setOut(JSON.stringify(j, null, 2));
   };
 }
 
 // ----------------------
-// Settings
+// Settings (dynamic)
 // ----------------------
 function initSettingsView() {
-  const tableBody = document.getElementById("settingsTable").tBodies[0];
+  const tableBody = document.querySelector("#settingsTable tbody");
   const addBtn = document.getElementById("settingsAdd");
   const saveBtn = document.getElementById("settingsSave");
   const reloadBtn = document.getElementById("settingsReload");
@@ -808,22 +820,31 @@ function initSettingsView() {
     msgEl.style.display = "block";
     msgEl.textContent = txt;
   }
+
   function rowHtml(key = "", val = "", secret = false, isSet = false) {
-    const displayVal = secret && isSet ? "•••••• (set)" : val;
+    const displayVal = secret ? (isSet ? "•••••• (set)" : "") : (val ?? "");
     return `
       <tr>
-        <td><input class="input s-key" placeholder="e.g. hibp_api_key" value="${escapeHtml(key)}"></td>
-        <td><input class="input s-val" placeholder="value" value="${escapeHtml(displayVal)}"></td>
-        <td style="text-align:center"><input type="checkbox" class="s-secret" ${secret ? "checked" : ""}></td>
+        <td><input class="input s-key" placeholder="e.g. hibp_api_key" value="${escapeHtml(
+          key,
+        )}"></td>
+        <td><input class="input s-val" placeholder="value" value="${escapeHtml(
+          displayVal,
+        )}"></td>
+        <td style="text-align:center"><input type="checkbox" class="s-secret" ${
+          secret ? "checked" : ""
+        }></td>
         <td><button class="btn danger s-del" type="button">Remove</button></td>
       </tr>
     `;
   }
+
   function bindRowEvents() {
     tableBody.querySelectorAll(".s-del").forEach((btn) => {
       btn.onclick = () => btn.closest("tr").remove();
     });
   }
+
   async function load() {
     if (!getToken()) {
       tableBody.innerHTML = "";
@@ -856,10 +877,12 @@ function initSettingsView() {
     bindRowEvents();
     showMsg("Loaded.");
   }
+
   addBtn.onclick = () => {
     tableBody.insertAdjacentHTML("beforeend", rowHtml());
     bindRowEvents();
   };
+
   saveBtn.onclick = async () => {
     if (!getToken()) return alert("Set token first (Token page).");
 
@@ -872,6 +895,7 @@ function initSettingsView() {
       const secret = tr.querySelector(".s-secret").checked;
       if (!k) continue;
 
+      // If secret and user left placeholder, don't overwrite
       if (secret && (v === "•••••• (set)" || v.trim() === "")) continue;
       out[k] = v;
     }
@@ -888,6 +912,7 @@ function initSettingsView() {
     showMsg("Saved. Reloading…");
     await load();
   };
+
   reloadBtn.onclick = load;
 
   if (savePublicUrlBtn) {
@@ -946,47 +971,42 @@ function initSettingsView() {
   load();
 }
 
-// ----------------------
-// Init
-// ----------------------
-function escapeHtml(str) {
-  return (str || "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#039;");
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
 }
 
-const logoutBtn = document.getElementById("logout");
+// logout
+const logoutBtn = document.querySelector("[data-action='logout']");
 if (logoutBtn) {
   logoutBtn.onclick = () => {
-    if (confirm("Are you sure you want to log out?")) {
-      setToken("");
-      window.location = "/login";
-    }
+    setToken("");
+    location.reload();
   };
 }
 
-(async () => {
-  renderTokenStatus();
-  // auto-verify token and redirect to login if needed
-  try {
-    const r = await fetch("/api/auth/verify", {
-      method: "POST",
-      headers: authHeaders(),
-    });
-    if (!r.ok) throw new Error("auth");
-  } catch (_) {
-    if (window.location.pathname !== "/login") {
-      window.location = "/login";
-      return;
-    }
-  }
+// menu clicks
+document.querySelectorAll(".menu-btn[data-view]").forEach((btn) => {
+  btn.onclick = () => loadView(btn.dataset.view);
+});
 
-  // view loader
-  document.querySelectorAll(".menu-btn[data-view]").forEach((b) => {
-    b.onclick = () => loadView(b.dataset.view);
-  });
-  loadView("dashboard");
-})();
+renderTokenStatus();
+
+if (!getToken()) {
+  window.location.replace("/login");
+} else {
+  fetch("/api/auth/verify", { method: "POST", headers: authHeaders() })
+    .then((res) => {
+      if (res.ok) {
+        loadView("dashboard");
+      } else {
+        setToken("");
+        window.location.replace("/login");
+      }
+    })
+    .catch(() => loadView("dashboard"));
+}
