@@ -23,6 +23,17 @@ from social_hunt.registry import build_registry, list_provider_names
 
 app = FastAPI(title="Social-Hunt API", version="2.2.0")
 
+
+@app.middleware("http")
+async def add_no_cache_header(request: Request, call_next):
+    response = await call_next(request)
+    # Disable caching for all responses to ensure users always see the latest UI and data
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    response.headers["Pragma"] = "no-cache"
+    response.headers["Expires"] = "0"
+    return response
+
+
 # ---- paths ----
 # Anchor all filesystem paths to the repo root so running from a different
 # working directory (systemd, Docker, etc.) does not break persistence.

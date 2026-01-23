@@ -1,0 +1,157 @@
+<h2>Secure Notes</h2>
+<p class="muted">
+    Create and store encrypted notes. All data is encrypted using AES-256-GCM
+    with your master password before being saved.
+    <strong
+        >Your master password is never stored and cannot be recovered.</strong
+    >
+</p>
+
+<div id="notesAuth" class="card">
+    <h3>Master Password</h3>
+    <p class="muted" style="font-size: 0.9em; margin-bottom: 12px">
+        Enter your master password to unlock or initialize your secure notes.
+    </p>
+    <div class="row">
+        <input
+            type="password"
+            id="masterPassword"
+            placeholder="Enter master password..."
+            style="flex: 1"
+        />
+        <button class="btn good" id="unlockNotesBtn">
+            Unlock / Initialize
+        </button>
+    </div>
+    <div
+        style="
+            margin-top: 15px;
+            border-top: 1px solid var(--border);
+            padding-top: 15px;
+        "
+    >
+        <p class="muted" style="font-size: 0.8em">
+            Trouble unlocking? If you've lost your password or the data is
+            corrupted (common after updates), you can reset the storage.
+            <strong style="color: var(--danger)"
+                >This will permanently delete all existing notes.</strong
+            >
+        </p>
+        <button class="btn danger small" id="resetNotesBtn">
+            Reset Storage (Delete All)
+        </button>
+    </div>
+</div>
+
+<div id="notesManager" style="display: none">
+    <div class="row" style="margin-bottom: 15px; gap: 10px">
+        <button class="btn" id="createNewNoteBtn">➕ New Note</button>
+        <button class="btn" id="exportNotesBtn">📥 Export (Encrypted)</button>
+        <button class="btn danger" id="lockNotesBtn">
+            🔒 Lock / Clear Session
+        </button>
+    </div>
+
+    <div class="row" style="gap: 20px; align-items: flex-start">
+        <!-- Notes List -->
+        <div class="card" style="flex: 1; max-width: 300px; padding: 10px">
+            <div
+                id="notesList"
+                style="display: flex; flex-direction: column; gap: 5px"
+            >
+                <!-- Note items will be rendered here -->
+                <div class="muted" style="text-align: center; padding: 20px">
+                    No notes found.
+                </div>
+            </div>
+        </div>
+
+        <!-- Note Editor -->
+        <div id="noteEditor" class="card" style="flex: 2; display: none">
+            <div class="row" style="margin-bottom: 12px">
+                <input
+                    type="text"
+                    id="noteTitle"
+                    placeholder="Note Title"
+                    style="font-weight: bold; font-size: 1.1rem"
+                />
+            </div>
+            <textarea
+                id="noteContent"
+                placeholder="Write your note here..."
+                style="
+                    min-height: 300px;
+                    font-family: monospace;
+                    width: 100%;
+                    box-sizing: border-box;
+                "
+            ></textarea>
+
+            <div
+                class="row"
+                style="margin-top: 15px; justify-content: space-between"
+            >
+                <div>
+                    <button class="btn good" id="saveNoteBtn">
+                        Save Changes
+                    </button>
+                    <button class="btn" id="closeNoteBtn">Close</button>
+                </div>
+                <button class="btn danger small" id="deleteNoteBtn">
+                    Delete Note
+                </button>
+            </div>
+            <div
+                id="noteStatus"
+                class="muted"
+                style="margin-top: 8px; font-size: 0.85em"
+            ></div>
+        </div>
+
+        <div
+            id="noNoteSelected"
+            class="card"
+            style="flex: 2; text-align: center; padding: 60px"
+        >
+            <div class="muted">
+                Select a note from the left or create a new one to get started.
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .note-item {
+        padding: 10px 15px;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .note-item:hover {
+        background: rgba(255, 255, 255, 0.08);
+        border-color: var(--accent);
+    }
+    .note-item.active {
+        background: rgba(var(--accent-rgb), 0.1);
+        border-color: var(--accent);
+        font-weight: bold;
+    }
+    #noteTitle,
+    #noteContent {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid var(--border);
+        color: var(--text);
+        padding: 10px;
+        border-radius: 4px;
+    }
+    #noteTitle:focus,
+    #noteContent:focus {
+        border-color: var(--accent);
+        outline: none;
+    }
+</style>

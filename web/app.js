@@ -25,6 +25,7 @@ const viewTitles = {
   "breach-search": "Breach Search", // Added breach search
   reverse: "Reverse Image",
   history: "History",
+  "secure-notes": "Secure Notes",
   plugins: "Plugins",
   tokens: "Token",
   settings: "Settings",
@@ -37,7 +38,7 @@ async function loadView(name) {
 
   viewTitle.textContent = viewTitles[name] || name;
 
-  const res = await fetch(`/static/views/${name}.html?v=layout3`, {
+  const res = await fetch(`/static/views/${name}.html?v=2.2.0`, {
     cache: "no-store",
   });
   viewContainer.innerHTML = await res.text();
@@ -50,6 +51,7 @@ async function loadView(name) {
   if (name === "plugins") initPluginsView();
   if (name === "tokens") initTokensView();
   if (name === "settings") initSettingsView();
+  if (name === "secure-notes") initSecureNotesView();
 }
 
 // ----------------------
@@ -257,6 +259,7 @@ function renderResults(job, containerId) {
     job.state === "done"
       ? `
     <div style="margin-bottom: 12px; display: flex; justify-content: flex-end; gap: 8px;">
+      <button class="btn" id="note-btn-${job.job_id}">Save to Notes</button>
       <button class="btn" id="dl-btn-csv-${job.job_id}">Download CSV</button>
       <button class="btn" id="dl-btn-${job.job_id}">Download JSON</button>
     </div>
@@ -298,6 +301,23 @@ function renderResults(job, containerId) {
     btnCsv.onclick = () => {
       job.type = "search";
       downloadJob(job, "csv");
+    };
+  }
+  const btnNote = document.getElementById(`note-btn-${job.job_id}`);
+  if (btnNote) {
+    btnNote.onclick = () => {
+      const text = (job.results || [])
+        .map((r) => {
+          const p = r.profile || {};
+          return `[${r.provider}] ${r.status} - ${r.url || "No URL"}\n   Name: ${p.display_name || ""}\n   Note: ${p.note || r.error || ""}`;
+        })
+        .join("\n\n");
+      const title = `Search: ${job.username || "results"}`;
+      if (window.addNoteDirectly) {
+        window.addNoteDirectly(title, text);
+      } else {
+        alert("Please go to Secure Notes and unlock them first.");
+      }
     };
   }
 }
@@ -522,6 +542,7 @@ function renderBreachView(job, containerId) {
   if (job.state === "done" && results.length > 0) {
     html += `
       <div style="margin-bottom: 12px; display: flex; justify-content: flex-end; gap: 8px;">
+        <button class="btn" id="note-breach-${job.job_id}">Save to Notes</button>
         <button class="btn" id="dl-breach-csv-${job.job_id}">Download CSV</button>
         <button class="btn" id="dl-breach-${job.job_id}">Download JSON</button>
       </div>
@@ -726,6 +747,32 @@ function renderBreachView(job, containerId) {
     btnCsv.onclick = () => {
       job.type = "breach-search";
       downloadJob(job, "csv");
+    };
+  }
+  const btnNote = document.getElementById(`note-breach-${job.job_id}`);
+  if (btnNote) {
+    btnNote.onclick = () => {
+      let text = `Breach Search: ${job.username || job.term}\n\n`;
+      const hibp = (job.results || []).find((r) => r.provider === "hibp");
+      if (hibp && hibp.profile?.breaches) {
+        text += `HIBP Breaches:\n- ${hibp.profile.breaches.join("\n- ")}\n\n`;
+      }
+      const bvip = (job.results || []).find((r) => r.provider === "breachvip");
+      if (bvip && bvip.profile?.raw_results) {
+        text += `BreachVIP Detailed Records:\n`;
+        bvip.profile.raw_results.forEach((row) => {
+          text += `--- ${row.source || row.breach || "Record"} ---\n`;
+          Object.entries(row).forEach(([k, v]) => {
+            if (v && typeof v !== "object") text += `${k}: ${v}\n`;
+          });
+          text += "\n";
+        });
+      }
+      if (window.addNoteDirectly) {
+        window.addNoteDirectly(`Breach: ${job.username || job.term}`, text);
+      } else {
+        alert("Please go to Secure Notes and unlock them first.");
+      }
     };
   }
 }
@@ -1266,6 +1313,264 @@ function initSettingsView() {
 }
 
 // ----------------------
+// Secure Notes
+// ----------------------
+async function initSecureNotesView() {
+  const authDiv = document.getElementById("notesAuth");
+  const managerDiv = document.getElementById("notesManager");
+  const masterPasswordInput = document.getElementById("masterPassword");
+  const unlockBtn = document.getElementById("unlockNotesBtn");
+  const resetBtn = document.getElementById("resetNotesBtn");
+
+  const notesList = document.getElementById("notesList");
+  const noteEditor = document.getElementById("noteEditor");
+  const noNoteSelected = document.getElementById("noNoteSelected");
+
+  const noteTitleInput = document.getElementById("noteTitle");
+  const noteContentInput = document.getElementById("noteContent");
+  const saveNoteBtn = document.getElementById("saveNoteBtn");
+  const closeNoteBtn = document.getElementById("closeNoteBtn");
+  const deleteNoteBtn = document.getElementById("deleteNoteBtn");
+  const createNewNoteBtn = document.getElementById("createNewNoteBtn");
+  const exportNotesBtn = document.getElementById("exportNotesBtn");
+  const lockNotesBtn = document.getElementById("lockNotesBtn");
+  const noteStatus = document.getElementById("noteStatus");
+
+  let currentKey = null;
+  let notes = [];
+  let currentNoteId = null;
+
+  const STORAGE_KEY = "sh_secure_notes_blob";
+
+  // --- Encryption Helpers ---
+  async function deriveKey(password, salt) {
+    const enc = new TextEncoder();
+    const baseKey = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(password),
+      "PBKDF2",
+      false,
+      ["deriveKey"],
+    );
+    return crypto.subtle.deriveKey(
+      {
+        name: "PBKDF2",
+        salt: salt,
+        iterations: 100000,
+        hash: "SHA-256",
+      },
+      baseKey,
+      { name: "AES-GCM", length: 256 },
+      false,
+      ["encrypt", "decrypt"],
+    );
+  }
+
+  async function encrypt(data, key) {
+    const enc = new TextEncoder();
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const encrypted = await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv },
+      key,
+      enc.encode(JSON.stringify(data)),
+    );
+    return {
+      iv: btoa(String.fromCharCode(...iv)),
+      data: btoa(String.fromCharCode(...new Uint8Array(encrypted))),
+    };
+  }
+
+  async function decrypt(encryptedObj, key) {
+    const iv = new Uint8Array(
+      atob(encryptedObj.iv)
+        .split("")
+        .map((c) => c.charCodeAt(0)),
+    );
+    const data = new Uint8Array(
+      atob(encryptedObj.data)
+        .split("")
+        .map((c) => c.charCodeAt(0)),
+    );
+    const decrypted = await crypto.subtle.decrypt(
+      { name: "AES-GCM", iv },
+      key,
+      data,
+    );
+    return JSON.parse(new TextDecoder().decode(decrypted));
+  }
+
+  // --- Logic ---
+  let currentSalt = null;
+
+  async function saveToDisk() {
+    if (!currentKey || !currentSalt) return;
+    const encrypted = await encrypt(notes, currentKey);
+    const blob = {
+      salt: btoa(String.fromCharCode(...currentSalt)),
+      iv: encrypted.iv,
+      data: encrypted.data,
+    };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(blob));
+  }
+
+  function renderList() {
+    if (!notes.length) {
+      notesList.innerHTML =
+        '<div class="muted" style="text-align: center; padding: 20px;">No notes found.</div>';
+      return;
+    }
+    notesList.innerHTML = notes
+      .map(
+        (n) => `
+      <div class="note-item ${n.id === currentNoteId ? "active" : ""}" data-id="${n.id}">
+        ${escapeHtml(n.title || "Untitled Note")}
+      </div>
+    `,
+      )
+      .join("");
+
+    notesList.querySelectorAll(".note-item").forEach((el) => {
+      el.onclick = () => selectNote(el.dataset.id);
+    });
+  }
+
+  function selectNote(id) {
+    currentNoteId = id;
+    const note = notes.find((n) => n.id === id);
+    if (!note) return;
+
+    noNoteSelected.style.display = "none";
+    noteEditor.style.display = "block";
+    noteTitleInput.value = note.title || "";
+    noteContentInput.value = note.content || "";
+    noteStatus.textContent = "";
+    renderList();
+  }
+
+  masterPasswordInput.onkeydown = (e) => {
+    if (e.key === "Enter") unlockBtn.click();
+  };
+
+  if (resetBtn) {
+    resetBtn.onclick = () => {
+      if (
+        confirm(
+          "Are you sure you want to delete ALL secure notes and reset storage? This cannot be undone.",
+        )
+      ) {
+        localStorage.removeItem(STORAGE_KEY);
+        alert("Storage reset. You can now initialize a new master password.");
+        location.reload();
+      }
+    };
+  }
+
+  unlockBtn.onclick = async () => {
+    const pwd = masterPasswordInput.value;
+    if (!pwd) return alert("Enter a password.");
+
+    const raw = localStorage.getItem(STORAGE_KEY);
+    try {
+      if (raw) {
+        const blob = JSON.parse(raw);
+        currentSalt = new Uint8Array(
+          atob(blob.salt)
+            .split("")
+            .map((c) => c.charCodeAt(0)),
+        );
+        currentKey = await deriveKey(pwd, currentSalt);
+        notes = await decrypt(blob, currentKey);
+      } else {
+        // Initialize new
+        currentSalt = crypto.getRandomValues(new Uint8Array(16));
+        currentKey = await deriveKey(pwd, currentSalt);
+        notes = [];
+        await saveToDisk();
+      }
+      authDiv.style.display = "none";
+      managerDiv.style.display = "block";
+      renderList();
+    } catch (e) {
+      console.error(e);
+      alert("Invalid password or corrupted data.");
+    }
+  };
+
+  createNewNoteBtn.onclick = () => {
+    const id = crypto.randomUUID();
+    notes.unshift({
+      id,
+      title: "New Note",
+      content: "",
+      ts: new Date().getTime(),
+    });
+    selectNote(id);
+    saveToDisk();
+  };
+
+  saveNoteBtn.onclick = async () => {
+    const note = notes.find((n) => n.id === currentNoteId);
+    if (!note) return;
+    note.title = noteTitleInput.value;
+    note.content = noteContentInput.value;
+    note.ts = new Date().getTime();
+    await saveToDisk();
+    noteStatus.textContent = "Saved at " + new Date().toLocaleTimeString();
+    renderList();
+  };
+
+  deleteNoteBtn.onclick = async () => {
+    if (!confirm("Delete this note?")) return;
+    notes = notes.filter((n) => n.id !== currentNoteId);
+    currentNoteId = null;
+    noteEditor.style.display = "none";
+    noNoteSelected.style.display = "block";
+    await saveToDisk();
+    renderList();
+  };
+
+  closeNoteBtn.onclick = () => {
+    currentNoteId = null;
+    noteEditor.style.display = "none";
+    noNoteSelected.style.display = "block";
+    renderList();
+  };
+
+  exportNotesBtn.onclick = () => {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return alert("No notes to export.");
+    const blob = new Blob([raw], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sh_secure_notes_backup_${new Date().getTime()}.json`;
+    a.click();
+  };
+
+  lockNotesBtn.onclick = () => {
+    currentKey = null;
+    notes = [];
+    currentNoteId = null;
+    masterPasswordInput.value = "";
+    authDiv.style.display = "block";
+    managerDiv.style.display = "none";
+    window.addNoteDirectly = null;
+  };
+
+  window.addNoteDirectly = async (title, content) => {
+    if (!currentKey) {
+      alert("Please unlock your Secure Notes first.");
+      return;
+    }
+    const id = crypto.randomUUID();
+    notes.unshift({ id, title, content, ts: new Date().getTime() });
+    await saveToDisk();
+    alert("Saved to Secure Notes!");
+  };
+}
+
+// ----------------------
+// Init
 // Init
 // ----------------------
 function downloadJob(job, format = "json") {
