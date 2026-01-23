@@ -46,11 +46,13 @@
 <div id="notesManager" style="display: none">
     <div class="row" style="margin-bottom: 15px; gap: 10px">
         <button class="btn" id="createNewNoteBtn">➕ New Note</button>
-        <button class="btn" id="exportNotesBtn">📥 Export (Encrypted)</button>
+        <button class="btn" id="exportNotesBtn">📥 Export</button>
+        <button class="btn" id="importNotesBtn">📤 Import</button>
         <button class="btn danger" id="lockNotesBtn">
             🔒 Lock / Clear Session
         </button>
     </div>
+    <input type="file" id="importFile" style="display: none" accept=".json" />
 
     <div class="row" style="gap: 20px; align-items: flex-start">
         <!-- Notes List -->

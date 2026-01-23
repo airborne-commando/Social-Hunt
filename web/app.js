@@ -1333,6 +1333,8 @@ async function initSecureNotesView() {
   const deleteNoteBtn = document.getElementById("deleteNoteBtn");
   const createNewNoteBtn = document.getElementById("createNewNoteBtn");
   const exportNotesBtn = document.getElementById("exportNotesBtn");
+  const importNotesBtn = document.getElementById("importNotesBtn");
+  const importFileInput = document.getElementById("importFile");
   const lockNotesBtn = document.getElementById("lockNotesBtn");
   const noteStatus = document.getElementById("noteStatus");
 
@@ -1545,6 +1547,57 @@ async function initSecureNotesView() {
     a.href = url;
     a.download = `sh_secure_notes_backup_${new Date().getTime()}.json`;
     a.click();
+  };
+
+  importNotesBtn.onclick = () => {
+    importFileInput.click();
+  };
+
+  importFileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (ev) => {
+      try {
+        const importedData = JSON.parse(ev.target.result);
+        if (!importedData.salt || !importedData.iv || !importedData.data) {
+          throw new Error("Invalid file format.");
+        }
+
+        if (
+          !confirm(
+            "Importing this backup will overwrite your current notes. Continue?",
+          )
+        )
+          return;
+
+        // Try to decrypt the imported file with current key to verify password
+        const salt = new Uint8Array(
+          atob(importedData.salt)
+            .split("")
+            .map((c) => c.charCodeAt(0)),
+        );
+
+        // Note: Decryption will only work if master password matches the one used for the backup
+        // We attempt decryption here to validate.
+        const decrypted = await decrypt(importedData, currentKey);
+
+        // If successful, update local state
+        notes = decrypted;
+        currentSalt = salt;
+        await saveToDisk();
+        renderList();
+        alert("Import successful!");
+      } catch (err) {
+        console.error(err);
+        alert(
+          "Import failed: Password mismatch or corrupted file. Ensure you are using the same master password that was used for the backup.",
+        );
+      }
+      importFileInput.value = "";
+    };
+    reader.readAsText(file);
   };
 
   lockNotesBtn.onclick = () => {
