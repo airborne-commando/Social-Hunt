@@ -1161,6 +1161,8 @@ function initSettingsView() {
   const msgEl = document.getElementById("settingsMsg");
   const publicUrlInput = document.getElementById("public_url");
   const savePublicUrlBtn = document.getElementById("saveSettings");
+  const themeSelect = document.getElementById("themeSelect");
+  const saveThemeBtn = document.getElementById("saveTheme");
   const updateBtn = document.getElementById("updateBtn"); // Assuming this exists now
   const updateLog = document.getElementById("updateLog"); // Assuming this exists now
 
@@ -1208,8 +1210,13 @@ function initSettingsView() {
       publicUrlInput.value = settings.public_url.value || "";
     }
 
+    if (settings.theme && themeSelect) {
+      themeSelect.value = settings.theme.value || "default";
+    }
+
     for (const [k, meta] of Object.entries(settings)) {
-      if (k === "public_url") continue; // Handled separately
+      if (k === "public_url" || k === "theme" || k === "replicate_api_token")
+        continue; // Handled separately
       tableBody.insertAdjacentHTML(
         "beforeend",
         rowHtml(k, meta.value, meta.secret, meta.is_set),
@@ -1271,6 +1278,43 @@ function initSettingsView() {
         load();
       } else {
         alert("Failed to save.");
+      }
+    };
+  }
+
+  if (saveThemeBtn) {
+    saveThemeBtn.onclick = async () => {
+      const theme = themeSelect.value;
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ settings: { theme } }),
+      });
+
+      if (r.ok) {
+        document.body.setAttribute("data-theme", theme);
+        alert("Theme updated.");
+      } else {
+        alert("Failed to update theme.");
+      }
+    };
+  }
+
+  // UPDATE SYSTEM (Re-added)
+  if (saveThemeBtn) {
+    saveThemeBtn.onclick = async () => {
+      const theme = themeSelect.value;
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ settings: { theme } }),
+      });
+
+      if (r.ok) {
+        document.body.setAttribute("data-theme", theme);
+        alert("Theme updated.");
+      } else {
+        alert("Failed to update theme.");
       }
     };
   }
@@ -1827,6 +1871,19 @@ document.querySelectorAll(".menu-btn[data-view]").forEach((btn) => {
 });
 
 renderTokenStatus();
+
+// Load theme on init
+fetch("/api/settings", { headers: authHeaders() })
+  .then((res) => res.json())
+  .then((j) => {
+    const theme = j.settings?.theme?.value;
+    if (theme && theme !== "default") {
+      document.body.setAttribute("data-theme", theme);
+    } else {
+      document.body.removeAttribute("data-theme");
+    }
+  })
+  .catch(() => {});
 
 if (!getToken()) {
   window.location.replace("/login");
