@@ -46,8 +46,10 @@ Social-Hunt is built with a modern, decoupled architecture:
 
 ### Option 1: Docker (Recommended)
 ```bash
-git clone https://github.com/your-repo/Social-Hunt.git
+git clone https://github.com/AfterPacket/Social-Hunt.git
+
 cd Social-Hunt/docker
+
 docker-compose up -d --build
 ```
 Access the dashboard at `http://localhost:8000`.
@@ -55,7 +57,8 @@ Access the dashboard at `http://localhost:8000`.
 ### Option 2: Manual Installation
 1.  **Clone and Navigate:**
     ```bash
-    git clone https://github.com/your-repo/Social-Hunt.git
+    git clone https://github.com/AfterPacket/Social-Hunt.git
+    
     cd Social-Hunt
     ```
 2.  **Install Dependencies:**
