@@ -676,6 +676,16 @@ function renderBreachView(job, containerId) {
     const raw = prof.raw_results || [];
 
     if (raw.length > 0) {
+      if (prof.demo_mode) {
+        html += `
+          <div class="card" style="border-left: 4px solid var(--warn); background: rgba(255, 193, 7, 0.05);">
+            <div style="color: var(--warn); font-weight: 800; margin-bottom: 5px;">DEMO MODE ACTIVE</div>
+            <div class="muted" style="font-size: 0.9rem;">
+              Personal information has been censored and results are limited to 5 records for demonstration purposes.
+            </div>
+          </div>
+        `;
+      }
       // Determine columns dynamically from data
       const exclude = [
         "_id",
@@ -694,6 +704,9 @@ function renderBreachView(job, containerId) {
       });
       const headerKeys = Array.from(keys).sort();
 
+      const isTruncated = raw.length > 500;
+      const displayRows = isTruncated ? raw.slice(0, 500) : raw;
+
       html += `
         <div class="card">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
@@ -709,7 +722,7 @@ function renderBreachView(job, containerId) {
                 </tr>
               </thead>
               <tbody>
-                ${raw
+                ${displayRows
                   .map((row) => {
                     const src =
                       row.source ||
@@ -1947,3 +1960,11 @@ if (!getToken()) {
     })
     .catch(() => loadView("dashboard"));
 }
+
+// Check for demo mode
+fetchWhoami().then((data) => {
+  if (data && data.demo_mode) {
+    const badge = document.getElementById("demoBadge");
+    if (badge) badge.style.display = "inline-flex";
+  }
+});
