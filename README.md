@@ -1,131 +1,150 @@
-# 🕵️‍♂️ Social-Hunt
+# Social-Hunt
 
-**Social-Hunt** is a professional-grade OSINT (Open Source Intelligence) framework designed for investigators, security researchers, and enthusiasts. It provides a unified dashboard to perform cross-platform username searches, data breach exposure analysis, and advanced facial recognition-based avatar matching.
+Social-Hunt is an OSINT framework for cross-platform username discovery, breach exposure lookups, and avatar-based face matching. It ships with a web dashboard and a CLI, supports data-driven provider packs, and includes optional AI-powered face restoration/demasking.
 
----
+## Features
 
-## 🚀 Key Features
+- Username presence scanning across many platforms using YAML providers.
+- Breach intelligence via Have I Been Pwned (HIBP) and BreachVIP.
+- Face matching against profile avatars using face recognition and image hashing.
+- Reverse image OSINT links (Google Lens, Bing, Yandex, etc.).
+- Optional AI face restoration/demasking via Replicate or a self-hosted worker.
+- Plugin system with hot-reload and optional web uploader.
+- Demo mode that censors sensitive data for safe demonstrations.
 
-### 🔍 Multi-Platform Username Search
-*   **Fast Discovery:** Scans 50+ social media platforms, forums, and sites simultaneously.
-*   **Extensible:** Uses a data-driven YAML provider system and supports custom Python plugins.
-*   **Advanced Detection:** Uses success/error patterns and HTTP status codes to minimize false positives.
+## Architecture
 
-### 🛡️ Breach Intelligence
-*   **HIBP Integration:** Seamlessly check Have I Been Pwned for account exposure across thousands of known leaks.
-*   **Detailed Records:** Deep integration with providers like Breach.VIP to retrieve specific leaked data (passwords, salts, IPs) directly on the dashboard.
-*   **Wildcard Support:** Perform advanced queries using wildcards (e.g., `user@*.com`).
-*   **Unified Reporting:** Consolidates breach data into a specialized, easy-to-read table.
+- Backend: FastAPI + httpx async scanning engine.
+- Frontend: Static HTML/CSS/JS dashboard (no heavy framework).
+- Core engine: async concurrency with per-provider rules and status heuristics.
 
-### 👤 Advanced Face Matcher
-*   **Dual-Mode Comparison:** 
-    *   **Facial Recognition:** Compares custom avatars using high-accuracy facial landmarks.
-    *   **Image Hashing:** Uses perceptual hashing (pHash) to identify default or generic avatars.
-*   **Visual Evidence:** Provides match confidence scores to help verify identity across platforms.
+## Quick Start
 
-### 🎭 AI Demasking
-*   **Face Reconstruction:** Use generative AI to predict and reconstruct facial features from masked subjects.
-*   **Forensic Restoration:** Automatically sharpen and enhance generated results for better identification leads.
-
-### 🔐 Secure Notes
-*   **End-to-End Encryption:** Store sensitive investigation notes locally using AES-256-GCM encryption.
-*   **Zero-Knowledge:** Your master password is never stored or sent to the server.
-*   **Import/Export:** Securely backup or transfer your encrypted notes database.
-
-### 🖼️ Reverse Image OSINT
-*   **One-Click Search:** Perform reverse image searches via Google Lens, Bing, Yandex, and specialized engines like PimEyes or FaceCheck.ID.
-*   **Image Hosting:** Securely handles temporary image uploads for analysis.
-
----
-
-## 🛠️ Architecture
-
-Social-Hunt is built with a modern, decoupled architecture:
-*   **Backend:** High-performance Python API powered by **FastAPI** and **httpx** for asynchronous scanning.
-*   **Frontend:** A clean, responsive dashboard built with vanilla JavaScript and CSS (no heavy frameworks required).
-*   **Core Engine:** Asynchronous task runner with built-in rate limiting and concurrency control.
-
----
-
-## 🚦 Getting Started
-
-### Prerequisites
-*   Python 3.9+
-*   `pip` (Python package manager)
-*   **Docker & Docker Compose** (Optional)
-
-### Option 1: Docker (Recommended)
+### Docker (recommended)
 ```bash
 git clone https://github.com/AfterPacket/Social-Hunt.git
-
 cd Social-Hunt/docker
-
 docker-compose up -d --build
 ```
-Access the dashboard at `http://localhost:8000`.
+Open `http://localhost:8000`.
 
-### Option 2: Manual Installation
-1.  **Clone and Navigate:**
-    ```bash
-    git clone https://github.com/AfterPacket/Social-Hunt.git
-    
-    cd Social-Hunt
-    ```
-2.  **Install Dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
-3.  **Run the Server:**
-    ```bash
-    python run.py
-    ```
-4.  **Access the Dashboard:**
-    Open `http://localhost:8000` in your web browser.
+### Manual install
+```bash
+git clone https://github.com/AfterPacket/Social-Hunt.git
+cd Social-Hunt
+python -m pip install -r requirements.txt
+python run.py
+```
+Open `http://localhost:8000`.
 
----
+For a full setup guide (virtualenv, tokens, Docker details), see `README_RUN.md`.
 
-## ⚙️ Configuration
+## CLI Usage
 
-Social-Hunt stores its settings in `data/settings.json`. You can configure these directly through the **Settings** and **Token** tabs in the dashboard:
+```bash
+python -m social_hunt.cli <username> --platforms github twitter reddit
+```
 
-| Setting | Description |
-| :--- | :--- |
-| `hibp_api_key` | Your Have I Been Pwned API key (required for HIBP scans). |
-| `replicate_api_token` | Your Replicate API token (required for AI Demasking). |
-| `admin_token` | A security token used to protect privileged operations (like plugin uploads). |
-| `public_url` | The base URL of your instance (used for generating reverse image links). |
+Useful options:
+- `--format csv|json` (default: csv)
+- `--max-concurrency 6`
+- `--face-match /path/to/image1.jpg /path/to/image2.png`
+- `--verbose` (writes `social_hunt.log`)
 
----
+## Configuration
 
-## 🧩 Plugins & Extensions
+### Settings file
 
-Social-Hunt is built for customization.
-*   **YAML Providers:** Add new sites to search by dropping a `.yaml` file into `plugins/providers/`.
-*   **Python Plugins:** Create complex scrapers or post-processing addons in `plugins/python/`.
+Settings are stored in `data/settings.json` (or `SOCIAL_HUNT_SETTINGS_PATH`).
 
-See [PLUGINS.md](PLUGINS.md) for more details.
+Common keys:
+- `admin_token` (dashboard admin token; can be set via the Token page)
+- `hibp_api_key` (required for HIBP)
+- `replicate_api_token` (required for Replicate-based demasking)
+- `public_url` (base URL for reverse-image links)
 
----
+Settings resolution order is:
+1) `data/settings.json` (or `SOCIAL_HUNT_SETTINGS_PATH`)
+2) environment variables: `KEY`, `KEY` uppercased, `SOCIAL_HUNT_<KEY uppercased>`
 
-## 🤝 Contributor Credits
+### Environment variables
 
-Social-Hunt is a community-driven project. Special thanks to:
+| Variable | Purpose |
+| :-- | :-- |
+| `SOCIAL_HUNT_HOST` | Bind address (default: `0.0.0.0`) |
+| `SOCIAL_HUNT_PORT` | Server port (default: `8000`) |
+| `SOCIAL_HUNT_RELOAD` | Enable auto-reload (`1` for dev) |
+| `SOCIAL_HUNT_SETTINGS_PATH` | Override `data/settings.json` |
+| `SOCIAL_HUNT_PROVIDERS_YAML` | Override `providers.yaml` |
+| `SOCIAL_HUNT_JOBS_DIR` | Override jobs output directory |
+| `SOCIAL_HUNT_PUBLIC_URL` | Base URL for reverse image engines |
+| `SOCIAL_HUNT_PLUGIN_TOKEN` | Admin token for protected actions |
+| `SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP` | Allow setting admin token in UI |
+| `SOCIAL_HUNT_BOOTSTRAP_SECRET` | Alternative bootstrap guard via `X-Bootstrap-Secret` |
+| `SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD` | Allow plugin uploads in dashboard |
+| `SOCIAL_HUNT_ALLOW_PY_PLUGINS` | Allow Python plugins (executes code) |
+| `SOCIAL_HUNT_PLUGIN_DIR` | Upload target for web plugins (default: `plugins/providers`) |
+| `SOCIAL_HUNT_PLUGINS_DIR` | Base plugins directory (default: `plugins`) |
+| `SOCIAL_HUNT_DEMO_MODE` | Censor sensitive fields in results |
+| `SOCIAL_HUNT_FACE_AI_URL` | External face restoration endpoint |
+| `REPLICATE_API_TOKEN` | Replicate API token for demasking |
 
-*   **Main Developer:** **afterpacket** – Original architecture and core engine.
-*   **Optimization & Build:** **airborne-commando** – Dependency management and build process optimization.
-*   **OSINT Specialists:** [Contributor Name] – Research and development of provider patterns.
-*   **Security Researchers:** [Contributor Name] – Breach data integration and API security.
-*   **UI/UX Designers:** [Contributor Name] – Dashboard layout and responsiveness.
+## Plugins
 
----
+Social-Hunt supports YAML provider packs and optional Python plugins:
 
-## ⚖️ Legal Disclaimer
+- YAML providers: `plugins/providers/*.yaml`
+- Python providers/addons: `plugins/python/providers/*.py`, `plugins/python/addons/*.py`
 
-**Social-Hunt is for educational and ethical investigative purposes only.** 
-The developers and contributors are not responsible for any misuse of this tool. Always ensure you have the legal right to perform searches and adhere to the Terms of Service of the platforms being scanned.
+To enable Python plugins, set `SOCIAL_HUNT_ALLOW_PY_PLUGINS=1`.
 
----
+The dashboard can upload `.yaml` or `.zip` bundles when:
 
-## 📄 License
+```
+SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1
+SOCIAL_HUNT_PLUGIN_TOKEN=long_random_token
+```
 
-This project is licensed under the GNU General Public License v3.0. See the [LICENSE](LICENSE) file for details.
+See `PLUGINS.md` for full details and plugin contracts.
+
+## Reverse Image OSINT
+
+Reverse-image links require a public base URL for your instance:
+
+- Set `public_url` in settings or `SOCIAL_HUNT_PUBLIC_URL` in the environment.
+
+## Troubleshooting
+
+- BreachVIP 403: Cloudflare may block datacenter IPs. Try manual search or change IP.
+- HIBP skipped: missing or invalid `hibp_api_key`.
+- Missing Python providers: ensure `SOCIAL_HUNT_ALLOW_PY_PLUGINS=1`.
+- Demask not working: set `REPLICATE_API_TOKEN` or `SOCIAL_HUNT_FACE_AI_URL`.
+
+## Project Structure
+
+- `api/` FastAPI app and settings store
+- `social_hunt/` core engine, registry, providers, addons, CLI
+- `web/` static dashboard UI
+- `plugins/` YAML providers and optional Python plugins
+- `data/` settings and scan jobs
+- `docker/` container build/deploy files
+
+## Documentation
+
+- `README_RUN.md` execution and configuration guide
+- `PLUGINS.md` plugin formats and uploader
+- `APACHE_SETUP.md` Apache reverse proxy notes
+- `LICENSE` GPL-3.0
+
+## Screenshots / UI Tour
+
+Add screenshots here to showcase the dashboard (overview, search, breach, face match, reverse image, settings, plugins).
+
+## Contributors
+
+Thanks to everyone who has helped build and maintain Social-Hunt.
+Add contributors here or link to a CONTRIBUTORS file if you prefer.
+
+## Legal and Ethics
+
+Social-Hunt is for lawful, authorized investigations only. You are responsible for complying with platform terms and local laws.
