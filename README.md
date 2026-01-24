@@ -138,7 +138,56 @@ Reverse-image links require a public base URL for your instance:
 
 ## Screenshots / UI Tour
 
-Add screenshots here to showcase the dashboard (overview, search, breach, face match, reverse image, settings, plugins).
+### Login
+![Login Screen](assets/screenshots/login.png)
+*Self-hosted OSINT aggregator with admin token authentication*
+
+### Dashboard
+![Dashboard Overview](assets/screenshots/dashboard.png)
+*Main dashboard showing welcome screen and recent job history*
+
+### Username Search
+![Search Results](assets/screenshots/search-results.png)
+*Comprehensive username search across 500+ platforms with real-time status indicators*
+
+### Breach Search
+![Breach Search](assets/screenshots/breach-search.png)
+*Data breach lookup powered by BreachVIP*
+
+### Reverse Image Search
+![Reverse Image](assets/screenshots/reverse-image.png)
+*Reverse image search with multiple engine options (Google Lens, Bing, Yandex)*
+
+### AI Face Restoration
+![Demasking](assets/screenshots/demasking.png)
+*Forensic AI demasking using Replicate or self-hosted models*
+
+### History
+![History](assets/screenshots/history.png)
+*Search History*
+
+### Secure Notes
+![Secure Notes - List](assets/screenshots/secure-notes.png)
+*Encrypted notes with AES-256-GCM encryption*
+
+![Secure Notes - Master Password](assets/screenshots/secure-notes-password.png)
+*Master password protection for secure notes*
+
+### Plugin System
+![Plugins](assets/screenshots/plugins.png)
+*YAML provider packs and plugin upload interface*
+
+### Settings & Configuration
+![Settings](assets/screenshots/settings.png)
+*Server configuration, theme selection, and API integrations*
+
+### Token Management
+![Token Management](assets/screenshots/token.png)
+*Admin token and browser token management*
+
+
+
+
 
 ## Contributors
 
