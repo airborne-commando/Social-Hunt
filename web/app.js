@@ -941,28 +941,33 @@ function renderBreachView(job, containerId) {
   }
   const btnNote = document.getElementById(`note-breach-${job.job_id}`);
   if (btnNote) {
-    btnNote.onclick = () => {
-      let text = `Breach Search: ${job.username || job.term}\n\n`;
-      const hibp = (job.results || []).find((r) => r.provider === "hibp");
-      if (hibp && hibp.profile?.breaches) {
-        text += `HIBP Breaches:\n- ${hibp.profile.breaches.join("\n- ")}\n\n`;
-      }
-      const bvip = (job.results || []).find((r) => r.provider === "breachvip");
-      if (bvip && bvip.profile?.raw_results) {
-        text += `BreachVIP Detailed Records:\n`;
-        bvip.profile.raw_results.forEach((row) => {
-          text += `--- ${row.source || row.breach || "Record"} ---\n`;
-          Object.entries(row).forEach(([k, v]) => {
-            if (v && typeof v !== "object") text += `${k}: ${v}\n`;
+    btnNote.onclick = async () => {
+      btnNote.textContent = "Saving...";
+      btnNote.disabled = true;
+      try {
+        let text = `Breach Search: ${job.username || job.term}\n\n`;
+        const hibp = (job.results || []).find((r) => r.provider === "hibp");
+        if (hibp && hibp.profile?.breaches) {
+          text += `HIBP Breaches:\n- ${hibp.profile.breaches.join("\n- ")}\n\n`;
+        }
+        const bvip = (job.results || []).find(
+          (r) => r.provider === "breachvip",
+        );
+        if (bvip && bvip.profile?.raw_results) {
+          text += `BreachVIP Detailed Records:\n`;
+          bvip.profile.raw_results.forEach((row) => {
+            text += `--- ${row.source || row.breach || "Record"} ---\n`;
+            Object.entries(row).forEach(([k, v]) => {
+              if (v && typeof v !== "object") text += `${k}: ${v}\n`;
+            });
+            text += "\n";
           });
-          text += "\n";
-        });
-      }
-      if (window.addNoteDirectly) {
-        window.addNoteDirectly(`Breach: ${job.username || job.term}`, text);
-      } else {
-        alert("Please go to Secure Notes and unlock them first.");
-      }
+        }
+        if (window.addNoteDirectly) {
+          window.addNoteDirectly(`Breach: ${job.username || job.term}`, text);
+        } else {
+          alert("Please go to Secure Notes and unlock them first.");
+        }
       } catch (e) {
         alert("Error saving note: " + e.message);
       } finally {
