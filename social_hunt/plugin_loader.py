@@ -142,6 +142,8 @@ def load_python_plugin_addons(allow: bool) -> Dict[str, BaseAddon]:
 def list_installed_plugins() -> Dict[str, Any]:
     """Return a simple inventory of plugin files present on disk."""
     root = plugins_dir()
+    print(f"[PLUGIN_LIST] Scanning plugins root: {root} (exists={root.exists()})")
+
     inv: Dict[str, Any] = {
         "root": str(root),
         "yaml_providers": [],
@@ -163,4 +165,8 @@ def list_installed_plugins() -> Dict[str, Any]:
         p.relative_to(root).as_posix()
         for p in _safe_glob(root / "python" / "addons", "*.py")
     ]
+
+    print(
+        f"[PLUGIN_LIST] Found {len(inv['yaml_providers'])} YAML, {len(inv['python_providers'])} Providers, {len(inv['python_addons'])} Addons"
+    )
     return inv
