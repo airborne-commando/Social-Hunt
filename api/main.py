@@ -853,17 +853,21 @@ async def api_plugin_delete(
     require_admin(x_plugin_token)
 
     # Basic path safety
-    if ".." in name or name.startswith("/") or name.startswith("\\"):
+    name = name.replace("\\", "/")
+    if ".." in name or name.startswith("/"):
         raise HTTPException(status_code=400, detail="Invalid plugin name")
 
-    plugins_root = _resolve_env_path("SOCIAL_HUNT_PLUGINS_DIR", "plugins")
+    plugins_root = _resolve_env_path("SOCIAL_HUNT_PLUGINS_DIR", "plugins").resolve()
     target = (plugins_root / name).resolve()
 
-    if not str(target).startswith(str(plugins_root)):
+    # Robust check for path containment
+    try:
+        target.relative_to(plugins_root)
+    except ValueError:
         raise HTTPException(status_code=400, detail="Path traversal detected")
 
     if not target.exists():
-        raise HTTPException(status_code=404, detail="Plugin not found")
+        raise HTTPException(status_code=404, detail=f"Plugin not found: {name}")
 
     if not target.is_file():
         raise HTTPException(status_code=400, detail="Target is not a file")
