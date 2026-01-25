@@ -30,12 +30,11 @@
 247ctf:
   url: https://247ctf.com/progress/{username}
   timeout: 20
-  ua_profile: 247ctf_android
+  ua_profile: desktop_chrome
   success_patterns:
     - "200"
-    - property="og:url"
+    - "Redirecting..."
   error_patterns:
-    - "302"
     - <h1>Redirecting...</h1>
 247sports:
   url: https://247sports.com/User/{username}/
@@ -288,16 +287,15 @@ aparat:
   error_patterns:
     - "404"
     - class="error-body"
-apex legends:
+apex_legends_tracker:
   url: https://api.tracker.gg/api/v2/apex/standard/profile/origin/{username}
-  timeout: 20
-  ua_profile: apex legends_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - platformInfo
+    - "platformInfo"
+    - "stats"
   error_patterns:
-    - "404"
-    - CollectorResultStatus::NotFound
+    - "CollectorResultStatus::NotFound"
 appian:
   url: https://community.appian.com/members/{username}
   timeout: 20
@@ -360,14 +358,14 @@ arduino (project hub):
     - '"userInfo":null'
 armorgames:
   url: https://armorgames.com/user/{username}
-  timeout: 20
-  ua_profile: armorgames_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - about
+    - "Profile"
+    - "Member Since"
   error_patterns:
-    - "302"
     - "404: Oh Noes!"
+    - "Page Not Found"
 arsmate:
   url: https://arsmate.com/{username}
   timeout: 20
@@ -978,16 +976,14 @@ cheezburger:
   error_patterns:
     - "302"
     - "<title>Home - "
-chess.com:
+chess_com:
   url: https://api.chess.com/pub/player/{username}
-  timeout: 20
-  ua_profile: chess.com_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - player_id
+    - "player_id"
   error_patterns:
-    - "404"
-    - not found
+    - "Not Found"
 choko.link:
   url: https://choko.link/api/auth/check
   timeout: 20
@@ -1377,23 +1373,22 @@ destructoid:
   error_patterns:
     - "200"
     - Error in query
-dev.to:
+dev_to:
   url: https://dev.to/{username}
-  timeout: 20
-  ua_profile: dev.to_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - '"@id":'
+    - "crayons-avatar" # Class for user avatar
+    - "Joined on"
   error_patterns:
-    - "404"
-    - class="not-found-page base-background-color"
+    - "isn't a user"
+    - "Page not found"
 deviantart:
   url: https://www.deviantart.com/{username}
   timeout: 20
   ua_profile: deviantart_android
   success_patterns:
     - "200"
-    - " | DeviantArt</title>"
   error_patterns:
     - "404"
     - "DeviantArt: 404"
@@ -1819,14 +1814,13 @@ fabswingers:
     - The user you tried to view doesn't seem to be on the site any more
 facebook:
   url: https://www.facebook.com/{username}/
-  timeout: 20
-  ua_profile: facebook_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
     - __isProfile
   error_patterns:
-    - "200"
     - <title>Facebook</title>
+    - content not found
 faceit:
   url: https://www.faceit.com/api/users/v1/nicknames/{username}
   timeout: 20
@@ -2045,16 +2039,15 @@ folkd:
   error_patterns:
     - "200"
     - '"result":"ok"'
-fortnite tracker:
+fortnite_tracker:
   url: https://fortnitetracker.com/profile/all/{username}
-  timeout: 20
-  ua_profile: fortnite tracker_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - s Fortnite Stats - Fortnite Tracker
+    - "Platform"
+    - "TRN Rating"
   error_patterns:
-    - "404"
-    - Fortnite Player Stats -
+    - "We could not find the account"
 forumprawne.org:
   url: https://forumprawne.org/members/{username}.html
   timeout: 20
@@ -2445,14 +2438,13 @@ gnome (shell extensions):
     - <h3>404 - Page not Found</h3>
 gog:
   url: https://www.gog.com/u/{username}
-  timeout: 20
-  ua_profile: gog_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - window.profilesData.profileUser
+    - "User profile"
+    - "Games owned"
   error_patterns:
-    - "302"
-    - href="http://www.gog.com/404"
+    - "Page not found"
 goodgame_russia:
   url: https://goodgame.ru/channel/{username}/
   timeout: 20
@@ -3093,14 +3085,14 @@ insanejournal:
     - The requested URL /profile was not found on this server
 instagram:
   url: https://www.instagram.com/{username}/
-  timeout: 20
+  timeout: 15
   ua_profile: instagram_android
+  # This pattern checks for a JSON object that only appears on valid profiles
   success_patterns:
-    - "200"
-    - '"routePath":"\/{username}\/{?tab}\/{?view_type}\/{?igshid}\/"'
+    - '"is_private":'
   error_patterns:
-    - "200"
-    - '"routePath":null'
+    - Sorry, this page isn't available
+    - Page Not Found
 instagram (imginn):
   url: https://imginn.com/{username}/
   timeout: 20
@@ -3522,14 +3514,13 @@ libretooth.gr (mastodon instance):
     - Record not found
 lichess.org:
   url: https://lichess.org/api/player/autocomplete?term={username}&exists=1
-  timeout: 20
-  ua_profile: lichess.org_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - "true"
+    - '"id":'
+    - '"username":'
   error_patterns:
-    - "200"
-    - "false"
+    - '"error": "Not found"'
 line:
   url: https://line.me/R/ti/p/@{username}?from=page
   timeout: 20
@@ -3879,16 +3870,15 @@ mcname (minecraft):
   error_patterns:
     - "200"
     - alert alert-success px-0 py-1
-mcuuid (minecraft):
+minecraft_playerdb:
   url: https://playerdb.co/api/player/minecraft/{username}
-  timeout: 20
-  ua_profile: mcuuid (minecraft)_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - Successfully found player by given ID.
+    - '"code": "player.found"'
+    - '"success": true'
   error_patterns:
-    - "200"
-    - minecraft.api_failure
+    - "player.not_found"
 medium:
   url: https://medium.com/@{username}/about
   timeout: 20
@@ -4467,8 +4457,7 @@ onlysearch (onlyfans):
     - "200"
     - '"hits":[{'
   error_patterns:
-    - "200"
-    - '"hits":[]'
+    - 'Page not found.'
 opencollective:
   url: https://opencollective.com/{username}
   timeout: 20
@@ -4477,8 +4466,7 @@ opencollective:
     - "200"
     - "- Open Collective"
   error_patterns:
-    - "200"
-    - Not Found
+    - 'Oops! Page not found'
 opensource:
   url: https://opensource.com/users/{username}
   timeout: 20
@@ -4488,7 +4476,7 @@ opensource:
     - '"contentID":'
   error_patterns:
     - "404"
-    - '"errorCode": "404"'
+    - 'Page not found'
 openstreetmap:
   url: https://www.openstreetmap.org/user/{username}
   timeout: 20
@@ -4498,7 +4486,7 @@ openstreetmap:
     - "Mapper since:"
   error_patterns:
     - "404"
-    - does not exist
+    - 'does not exist'
 openstreetmap wiki:
   url: https://wiki.openstreetmap.org/w/api.php?action=query&format=json&list=users&ususers={username}
   timeout: 20
@@ -4799,14 +4787,14 @@ pinkbike:
     - I couldn't find the page you were looking for
 pinterest:
   url: https://www.pinterest.com/{username}/
-  timeout: 20
+  timeout: 15
   ua_profile: pinterest_android
   success_patterns:
-    - "200"
-    - " - Profile | Pinterest"
+    - ' - Profile | Pinterest'
+    - 'Followers'
   error_patterns:
-    - "301"
-    - id="home-main-title
+    - "couldn't find that page"
+    - "page not found"
 pixelfed.social:
   url: https://pixelfed.social/{username}
   timeout: 20
@@ -4817,16 +4805,16 @@ pixelfed.social:
   error_patterns:
     - "404"
     - <title>pixelfed</title>
-playstation network:
-  url: https://psnprofiles.com/xhr/search/users?q={username}
-  timeout: 20
-  ua_profile: playstation network_android
+playstation_network:
+  url: https://psnprofiles.com/{username}
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - <div class="progress-bar small level">
+    - "PSN Profile"
+    - "Level"
   error_patterns:
-    - "200"
-    - "We couldn't find anything "
+    - "Not Found"
+    - "user not found"
 plink:
   url: https://plink.gg/user/{username}
   timeout: 20
@@ -5208,14 +5196,13 @@ redbubble:
     - This is a lost cause.
 reddit:
   url: https://www.reddit.com/user/{username}/about/.json
-  timeout: 20
+  timeout: 15
   ua_profile: reddit_android
   success_patterns:
-    - "200"
     - total_karma
   error_patterns:
-    - "404"
     - Not Found
+    - "nobody on reddit goes by that name"
 redgifs:
   url: https://api.redgifs.com/v1/users/{username}
   timeout: 20
@@ -5288,14 +5275,14 @@ risk.ru:
     - 404 — Risk.ru
 roblox:
   url: https://auth.roblox.com/v1/usernames/validate?username={username}&birthday=2019-12-31T23:00:00.000Z
-  timeout: 20
-  ua_profile: roblox_android
+  timeout: 15
+  ua_profile: desktop_chrome
+  # The API returns a user ID if the user exists
   success_patterns:
-    - "200"
-    - Username is already in use
+    - '"id":'
   error_patterns:
-    - "200"
-    - Username is valid
+    - "User not found"
+    - "Page cannot be found"
 routinehub:
   url: https://routinehub.co/user/{username}
   timeout: 20
@@ -5658,14 +5645,13 @@ smule:
     - 'code": 65'
 snapchat:
   url: https://www.snapchat.com/@{username}
-  timeout: 20
+  timeout: 15
   ua_profile: snapchat_android
   success_patterns:
-    - "200"
     - is on Snapchat!
   error_patterns:
-    - "200"
     - NOT_FOUND
+    - could not be found
 snipfeed:
   url: https://snipfeed.co/{username}
   timeout: 20
@@ -5859,14 +5845,14 @@ statuspage:
     - <html><body>You are being <a href="https://www.statuspage.io">redirected</a>.</body></html>
 steam:
   url: https://steamcommunity.com/id/{username}
-  timeout: 20
-  ua_profile: steam_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - g_rgProfileData =
+    - "g_rgProfileData"
+    - "profile_header"
   error_patterns:
-    - "200"
-    - "Steam Community :: Error"
+    - "The specified profile could not be found"
+    - "Error"
 steamgifts:
   url: https://www.steamgifts.com/user/{username}
   timeout: 20
@@ -6246,13 +6232,12 @@ threads.net:
     - <title>Threads</title>
 tiktok:
   url: https://www.tiktok.com/oembed?url=https://www.tiktok.com/@{username}
-  timeout: 20
+  timeout: 15
   ua_profile: tiktok_android
   success_patterns:
-    - "200"
     - author_url
   error_patterns:
-    - "400"
+    - "Couldn't find this account"
     - Something went wrong
 tilde.zone (mastodon instance):
   url: https://tilde.zone/api/v1/accounts/lookup?acct={username}
@@ -6456,14 +6441,14 @@ twitcasting:
     - Not Found
 twitch:
   url: https://twitchtracker.com/{username}
-  timeout: 20
+  timeout: 15
   ua_profile: twitch_android
   success_patterns:
-    - "200"
-    - Overview</a>
+    - "Followers"
+    - "Stream history"
   error_patterns:
-    - "404"
-    - <title>404 Page Not Found
+    - "doesn't exist"
+    - "Page not found"
 twitter archived profile:
   url: http://archive.org/wayback/available?url=https://twitter.com/{username}
   timeout: 20
@@ -7101,16 +7086,14 @@ wykop:
   error_patterns:
     - "404"
     - Wystąpił błąd 404.
-x:
+x_twitter:
   url: https://api.x.com/i/users/username_available.json?username={username}
-  timeout: 20
-  ua_profile: x_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - '"reason":"taken"'
+    - '"valid":true'
   error_patterns:
-    - "200"
-    - '"reason":"available"'
+    - '"valid":false'
 xakep.ru:
   url: https://xakep.ru/author/{username}/
   timeout: 20
@@ -7130,16 +7113,16 @@ xanga:
     - s Xanga Site | Just
   error_patterns:
     - "302"
-xbox gamertag:
+xbox_gamertag:
   url: https://www.xboxgamertag.com/search/{username}
-  timeout: 20
-  ua_profile: xbox gamertag_android
+  timeout: 15
+  ua_profile: desktop_chrome
   success_patterns:
-    - "200"
-    - Games Played
+    - "Gamerscore"
+    - "Games Played"
   error_patterns:
-    - "404"
-    - Gamertag doesn't exist
+    - "Could not find gamer"
+    - "No gamer found"
 xhamster:
   url: https://xhamster.com/users/{username}
   timeout: 20
