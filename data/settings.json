@@ -1,4 +1,5 @@
 {
   "admin_token": "ChangeME",
+  "demo_mode": false,
   "theme": "tokyo"
 }

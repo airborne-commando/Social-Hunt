@@ -60,6 +60,7 @@ Enable demo mode to showcase functionality while protecting personal data (censo
 ```bash
 export SOCIAL_HUNT_DEMO_MODE="1"
 ```
+If the env var is not set, demo mode can be toggled from the Settings page and is stored in `data/settings.json`.
 
 #### C. Bootstrap Mode (Initial Setup)
 If you don't want to use environment variables, enable bootstrap mode once:

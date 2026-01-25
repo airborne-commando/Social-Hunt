@@ -1,14 +1,69 @@
+import json
 import os
 import re
+import time
+from pathlib import Path
 from typing import Any, Dict, List, Union
 
-# Environment variable to toggle demo mode
-SOCIAL_HUNT_DEMO_MODE = os.getenv("SOCIAL_HUNT_DEMO_MODE", "0") == "1"
+_DEMO_CACHE = {"value": None, "ts": 0.0, "mtime": None}
+_CACHE_TTL_SEC = 2.0
+
+
+def _settings_path() -> Path:
+    env_path = (os.getenv("SOCIAL_HUNT_SETTINGS_PATH") or "").strip()
+    if env_path:
+        p = Path(env_path)
+    else:
+        p = Path("data/settings.json")
+    return p if p.is_absolute() else (Path(__file__).resolve().parents[1] / p)
+
+
+def _read_demo_mode_from_settings() -> bool | None:
+    path = _settings_path()
+    try:
+        mtime = path.stat().st_mtime
+    except FileNotFoundError:
+        return None
+    except Exception:
+        return None
+
+    now = time.time()
+    cached = _DEMO_CACHE
+    if cached["value"] is not None and cached["mtime"] == mtime:
+        if now - float(cached["ts"]) < _CACHE_TTL_SEC:
+            return cached["value"]
+
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+
+    val = None
+    if isinstance(raw, dict):
+        val = raw.get("demo_mode")
+
+    demo = None
+    if isinstance(val, bool):
+        demo = val
+    elif isinstance(val, (int, float)):
+        demo = bool(int(val))
+    elif isinstance(val, str):
+        demo = val.strip().lower() in ("1", "true", "yes", "on")
+
+    cached["value"] = demo
+    cached["ts"] = now
+    cached["mtime"] = mtime
+    return demo
 
 
 def is_demo_mode() -> bool:
     """Check if the application is running in demo mode."""
-    return SOCIAL_HUNT_DEMO_MODE
+    env = os.getenv("SOCIAL_HUNT_DEMO_MODE")
+    if env is not None and env.strip() != "":
+        return env.strip() == "1"
+
+    val = _read_demo_mode_from_settings()
+    return bool(val)
 
 
 def censor_value(value: Any, key: str = "") -> Any:

@@ -1298,6 +1298,8 @@ function initSettingsView() {
   const updateBtn = document.getElementById("updateBtn"); // Assuming this exists now
   const updateLog = document.getElementById("updateLog"); // Assuming this exists now
   const restartBtn = document.getElementById("restartBtn");
+  const demoModeToggle = document.getElementById("demoModeToggle");
+  const saveDemoModeBtn = document.getElementById("saveDemoMode");
 
   function showMsg(txt) {
     msgEl.style.display = "block";
@@ -1347,8 +1349,23 @@ function initSettingsView() {
       themeSelect.value = settings.theme.value || "default";
     }
 
+    if (demoModeToggle) {
+      const raw = settings.demo_mode?.value;
+      const enabled =
+        raw === true ||
+        raw === 1 ||
+        raw === "1" ||
+        (typeof raw === "string" && raw.toLowerCase() === "true");
+      demoModeToggle.checked = !!enabled;
+    }
+
     for (const [k, meta] of Object.entries(settings)) {
-      if (k === "public_url" || k === "theme" || k === "replicate_api_token")
+      if (
+        k === "public_url" ||
+        k === "theme" ||
+        k === "replicate_api_token" ||
+        k === "demo_mode"
+      )
         continue; // Handled separately
       tableBody.insertAdjacentHTML(
         "beforeend",
@@ -1521,6 +1538,22 @@ function initSettingsView() {
         if (updateLog) updateLog.textContent = "Error: " + e.message;
         restartBtn.disabled = false;
       }
+    };
+  }
+
+  if (saveDemoModeBtn && demoModeToggle) {
+    saveDemoModeBtn.onclick = async () => {
+      if (!getToken()) return alert("Set token first (Token page).");
+      const demo_mode = demoModeToggle.checked;
+      const r = await fetch("/api/settings", {
+        method: "PUT",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ settings: { demo_mode } }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return showMsg(j.detail || `Save failed (${r.status})`);
+      showMsg("Demo mode updated.");
+      load();
     };
   }
 
