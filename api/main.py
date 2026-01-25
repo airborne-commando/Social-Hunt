@@ -860,13 +860,19 @@ async def api_plugin_delete(
     plugins_root = _resolve_env_path("SOCIAL_HUNT_PLUGINS_DIR", "plugins").resolve()
     target = (plugins_root / name).resolve()
 
+    print(f"[DELETE] Root: {plugins_root}")
+    print(f"[DELETE] Target: {target}")
+    print(f"[DELETE] Name param: {name}")
+
     # Robust check for path containment
     try:
         target.relative_to(plugins_root)
     except ValueError:
+        print(f"[DELETE] Path traversal detected for {target} vs {plugins_root}")
         raise HTTPException(status_code=400, detail="Path traversal detected")
 
     if not target.exists():
+        print(f"[DELETE] Target does not exist: {target}")
         raise HTTPException(status_code=404, detail=f"Plugin not found: {name}")
 
     if not target.is_file():

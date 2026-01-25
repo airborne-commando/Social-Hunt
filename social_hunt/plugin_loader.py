@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, TypeVar
 import yaml
 
 from .addons_base import BaseAddon
+from .paths import resolve_path
 from .providers_base import BaseProvider
 from .providers_yaml import PatternProvider
 
@@ -20,7 +21,7 @@ def plugins_dir() -> Path:
 
     Defaults to ./plugins (relative to repo root / working dir).
     """
-    return Path(os.getenv("SOCIAL_HUNT_PLUGINS_DIR", "plugins")).resolve()
+    return resolve_path(os.getenv("SOCIAL_HUNT_PLUGINS_DIR", "plugins"))
 
 
 def _safe_glob(base: Path, pattern: str) -> List[Path]:
