@@ -752,6 +752,7 @@ def _install_py_bytes(category: str, filename: str, data: bytes) -> str:
         out_name += ".py"
 
     out_path = target_dir / out_name
+    print(f"[UPLOAD] Installing python plugin: {out_path}")
     out_path.write_bytes(data)
     return str(out_path)
 
@@ -759,6 +760,7 @@ def _install_py_bytes(category: str, filename: str, data: bytes) -> str:
 def _extract_plugins_from_zip(zbytes: bytes) -> List[str]:
     installed: List[str] = []
     allow_py = os.getenv("SOCIAL_HUNT_ALLOW_PY_PLUGINS", "").strip() == "1"
+    print(f"[UPLOAD] Extracting ZIP. allow_py={allow_py}")
 
     with zipfile.ZipFile(BytesIO(zbytes)) as z:
         for info in z.infolist():
@@ -767,10 +769,12 @@ def _extract_plugins_from_zip(zbytes: bytes) -> List[str]:
             name = info.filename.replace("\\", "/")
             # block traversal
             if name.startswith("/") or ".." in name:
+                print(f"[UPLOAD] SKIP (unsafe path): {name}")
                 continue
             lower = name.lower()
             data = z.read(info)
             fname = Path(name).name
+            print(f"[UPLOAD] Processing zip entry: {name}")
 
             if lower.endswith(".yaml") or lower.endswith(".yml"):
                 installed.append(_install_yaml_bytes(fname, data))
@@ -781,6 +785,10 @@ def _extract_plugins_from_zip(zbytes: bytes) -> List[str]:
                     installed.append(_install_py_bytes("providers", fname, data))
                 elif "python/addons/" in name:
                     installed.append(_install_py_bytes("addons", fname, data))
+                else:
+                    print(f"[UPLOAD] SKIP (py not in correct folder): {name}")
+            elif lower.endswith(".py") and not allow_py:
+                print(f"[UPLOAD] SKIP (py disabled): {name}")
 
     return installed
 
@@ -817,6 +825,7 @@ async def api_plugin_upload(
 
     fname = (file.filename or "plugin").strip()
     lower = fname.lower()
+    print(f"[UPLOAD] Received file: {fname} ({len(raw)} bytes)")
 
     installed: List[str] = []
 
@@ -829,8 +838,10 @@ async def api_plugin_upload(
     elif lower.endswith(".yaml") or lower.endswith(".yml"):
         installed = [_install_yaml_bytes(fname, raw)]
     else:
+        print("[UPLOAD] Rejected: invalid extension")
         raise HTTPException(status_code=400, detail="upload must be .yaml/.yml or .zip")
 
+    print(f"[UPLOAD] Installed files: {installed}")
     reload_registry()
 
     return {
