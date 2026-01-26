@@ -59,3 +59,10 @@
 #   ua_profile: "desktop_chrome"
 #   success_patterns: ["pay", "request", "cashtag"]
 #   error_patterns: ["not a valid cashtag", "page not found"]
+
+r00m101:
+  url: "https://api.r00m101.com/analyze/{username}?latest=false&refresh=false&sources=false"
+  timeout: 10
+  ua_profile: "desktop_chrome"
+  success_patterns: ["username","age","sex","location"]
+  error_patterns: ["could not analyze comments for"]
