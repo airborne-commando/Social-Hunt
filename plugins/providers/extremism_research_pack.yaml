@@ -38,7 +38,7 @@ wikipedia_search:
 # Returns a JSON list of articles (rolling window, per GDELT).
 # If your query contains spaces, consider using + or URL-encoding in the input.
 
-gdelt_news_mentions:
+gdelt_news:
   url: "https://api.gdeltproject.org/api/v2/doc/doc?query={username}&mode=ArtList&format=json&maxrecords=20&sort=hybridrel"
   timeout: 15
   ua_profile: "desktop_chrome"
@@ -52,7 +52,7 @@ gdelt_news_mentions:
 # NOTE: this is a *search query* shortcut; it does not label a person.
 # If your username includes special characters, you may need to URL-encode it.
 
-gdelt_extremism_context:
+gdelt_context:
   url: "https://api.gdeltproject.org/api/v2/doc/doc?query=%22{username}%22%20(white%20supremacist%20OR%20white%20nationalist%20OR%20neo-nazi%20OR%20neo%20nazi%20OR%20extremism)&mode=ArtList&format=json&maxrecords=20&sort=hybridrel"
   timeout: 15
   ua_profile: "desktop_chrome"
