@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from typing import Callable, Dict, List, Optional
 
 import httpx
@@ -40,7 +41,11 @@ class SocialHuntEngine:
 
         sem = asyncio.Semaphore(self.max_concurrency)
 
-        async with httpx.AsyncClient() as client:
+        # Allow optional proxy configuration (e.g. socks5://127.0.0.1:9050 for Tor)
+        # Note: SOCKS support requires 'pip install httpx-socks'
+        proxy = os.getenv("SOCIAL_HUNT_PROXY")
+
+        async with httpx.AsyncClient(proxy=proxy) as client:
 
             async def run_one(name: str) -> ProviderResult:
                 prov = self.registry[name]
