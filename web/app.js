@@ -491,7 +491,8 @@ async function monitorJob(
           (r) =>
             r.status === "error" ||
             r.status === "unknown" ||
-            r.status === "blocked",
+            r.status === "blocked" ||
+            r.status === "not_found",
         ).length;
       statusEl.textContent = `Done. (${foundCount} found, ${failedCount} failed)`;
       markSearchHistory(jobId, {
@@ -526,7 +527,8 @@ async function monitorJob(
         (r) =>
           r.status === "error" ||
           r.status === "unknown" ||
-          r.status === "blocked",
+          r.status === "blocked" ||
+          r.status === "not_found",
       ).length;
     const totalProviders = job.providers_count;
     const progressText =
