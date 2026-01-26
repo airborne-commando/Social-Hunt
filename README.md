@@ -109,7 +109,7 @@ Set the `SOCIAL_HUNT_PROXY` environment variable before starting the app. Use `s
 
 **Linux/Mac:**
 ```bash
-export SOCIAL_HUNT_PROXY="socks5h://127.0.0.1:9050"
+export SOCIAL_HUNT_PROXY="socks5://127.0.0.1:9050"
 python run.py
 ```
 
