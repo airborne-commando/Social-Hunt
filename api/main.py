@@ -269,7 +269,7 @@ def _summarize_results(results: List[Dict[str, Any]]) -> Dict[str, int]:
         status = (r or {}).get("status")
         if status == "found":
             found += 1
-        elif status in ("error", "unknown", "blocked"):
+        elif status in ("error", "unknown", "blocked", "not_found"):
             failed += 1
     return {"results_count": total, "found_count": found, "failed_count": failed}
 
