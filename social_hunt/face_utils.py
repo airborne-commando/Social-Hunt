@@ -69,9 +69,19 @@ def preprocess_for_ai(image_bytes: bytes, max_size: int = 1024) -> bytes:
     try:
         img = Image.open(io.BytesIO(image_bytes))
 
+        # Fix for Pillow warning regarding palette images with transparency
+        if img.mode == "P" and "transparency" in img.info:
+            img = img.convert("RGBA")
+
         # Convert to RGB if necessary (remove Alpha channel)
         if img.mode != "RGB":
-            img = img.convert("RGB")
+            if img.mode in ("RGBA", "LA"):
+                # Composite over white background for better JPEG conversion
+                bg = Image.new("RGB", img.size, (255, 255, 255))
+                bg.paste(img, mask=img.split()[-1])
+                img = bg
+            else:
+                img = img.convert("RGB")
 
         # Resize if too large to save bandwidth/VRAM
         if max(img.size) > max_size:
