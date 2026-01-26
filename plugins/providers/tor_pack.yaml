@@ -1,0 +1,54 @@
+# Social-Hunt Tor/Onion Provider Pack
+# Requires Tor proxy (socks5h://127.0.0.1:9050) and httpx[socks]
+
+ahmia_onion:
+  url: "http://juhanurmihxlp77nkq76byazcldy2hlmovfu2epvl5ankdibsot4csyd.onion/search/?q={username}"
+  timeout: 45
+  success_patterns:
+    - "{username}"
+  error_patterns:
+    - "No results found"
+
+torch_search:
+  url: "http://xmh57jrknzkhv6y3ls3ubitzfqnkrwxhopf5aygthi7d6rplbgnplrad.onion/cgi-bin/omega/omega?P={username}"
+  timeout: 60
+  success_patterns:
+    - "<b>{username}</b>"
+  error_patterns:
+    - "No documents matched"
+
+hidden_answers:
+  url: "http://answerszuvs3gg2l64e6hmnryudl5zgrmwm3vh65hzszdghblddvfiqd.onion/user/{username}"
+  timeout: 60
+  success_patterns:
+    - "{username}"
+  error_patterns:
+    - "User not found"
+    - "404"
+
+onion_land_search:
+  url: "http://3bba4cmj72joy2i2qzz671k5k38338kjbhy32yl3333333333333333.onion/search?q={username}"
+  timeout: 45
+  success_patterns:
+    - "Results for {username}"
+  error_patterns:
+    - "No results"
+
+excavator_search:
+  url: "http://2v70466v6v46v36v.onion/search/{username}"
+  timeout: 45
+  success_patterns:
+    - "{username}"
+  error_patterns:
+    - "no results"
+
+danwin_files:
+  url: "http://danwin1210.me/users/{username}/"
+  timeout: 30
+  success_patterns:
+    - "Index of /users/{username}"
+  error_patterns:
+    - "404 Not Found"
+
+# Note: Many forums require login or have heavy captchas (Dread, etc.)
+# and are excluded here for reliability.
