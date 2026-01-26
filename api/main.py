@@ -377,7 +377,7 @@ async def api_search(req: SearchRequest):
             status_val = status.value if status is not None else None
             if status_val == "found":
                 job["found_count"] = int(job.get("found_count", 0)) + 1
-            elif status_val in ("error", "unknown", "blocked"):
+            elif status_val in ("error", "unknown", "blocked", "not_found"):
                 job["failed_count"] = int(job.get("failed_count", 0)) + 1
 
     async def runner():
@@ -512,7 +512,7 @@ async def api_face_search(
             status_val = status.value if status is not None else None
             if status_val == "found":
                 job["found_count"] = int(job.get("found_count", 0)) + 1
-            elif status_val in ("error", "unknown", "blocked"):
+            elif status_val in ("error", "unknown", "blocked", "not_found"):
                 job["failed_count"] = int(job.get("failed_count", 0)) + 1
 
     async def runner():
