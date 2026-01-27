@@ -12,6 +12,7 @@ Social-Hunt is an OSINT framework for cross-platform username discovery, breach 
 - Optional AI face restoration/demasking via Replicate or a self-hosted worker.
 - Plugin system with hot-reload and optional web uploader.
 - Demo mode that censors sensitive data for safe demonstrations.
+- Dashboard theme applies immediately on selection.
 
 ## Architecture
 
@@ -96,6 +97,7 @@ Settings resolution order is:
 ## Tor / Darkweb Support
 
 Social-Hunt supports scanning `.onion` sites by routing traffic through a Tor proxy. It uses split-tunneling, so regular sites (like Twitter) use your direct connection while `.onion` sites go through the proxy.
+For safety, avatar face matching skips `.onion` hosts.
 
 ### Prerequisites
 1. Install Tor (e.g., `sudo apt install tor` or use Tor Browser).
