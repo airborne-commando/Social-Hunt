@@ -675,6 +675,7 @@ async function startScan() {
     }
     res = await fetch("/api/face-search", {
       method: "POST",
+      headers: authHeaders(),
       body: formData,
     });
   } else {
