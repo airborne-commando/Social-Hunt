@@ -24,16 +24,18 @@ function renderTokenStatus() {
 const viewTitles = {
   dashboard: "Dashboard",
   search: "Search",
-  "breach-search": "Breach Search", // Added breach search
+  "breach-search": "Breach Search",
   reverse: "Reverse Image",
   history: "History",
   "secure-notes": "Secure Notes",
   demask: "Demasking",
+  iopaint: "IOPaint Inpainting",
   plugins: "Plugins",
   tokens: "Token",
   settings: "Settings",
 };
 
+// Update the loadView function (around line 39)
 async function loadView(name) {
   document.querySelectorAll(".menu-btn[data-view]").forEach((b) => {
     b.classList.toggle("active", b.dataset.view === name);
@@ -48,7 +50,7 @@ async function loadView(name) {
 
   if (name === "dashboard") initDashboardView();
   if (name === "search") initSearchView();
-  if (name === "breach-search") initBreachSearchView(); // Initialize breach search
+  if (name === "breach-search") initBreachSearchView();
   if (name === "reverse") initReverseView();
   if (name === "history") initHistoryView();
   if (name === "plugins") initPluginsView();
@@ -56,6 +58,7 @@ async function loadView(name) {
   if (name === "settings") initSettingsView();
   if (name === "secure-notes") initSecureNotesView();
   if (name === "demask") initDemaskView();
+  if (name === "iopaint") initIOPaintView(); // Add this line
 }
 
 // ----------------------
@@ -2163,6 +2166,211 @@ async function initDemaskView() {
       startBtn.disabled = false;
     }
   };
+}
+
+// ----------------------
+// IOPaint Inpainting
+// ----------------------
+async function initIOPaintView() {
+  // Elements
+  const statusText = document.getElementById('statusText');
+  const serverControls = document.getElementById('serverControls');
+  const serverInfo = document.getElementById('serverInfo');
+  const serverPort = document.getElementById('serverPort');
+  const startServerBtn = document.getElementById('startServerBtn');
+  const stopServerBtn = document.getElementById('stopServerBtn');
+  const openIOPaintBtn = document.getElementById('openIOPaintBtn');
+  const modelSelect = document.getElementById('modelSelect');
+  const deviceSelect = document.getElementById('deviceSelect');
+  const portInput = document.getElementById('portInput');
+  
+  if (!statusText) return; // Safety check
+  
+  // Check IOPaint installation
+  async function checkIOPaintInstallation() {
+      try {
+          const response = await fetch('/api/iopaint/check');
+          const data = await response.json();
+          
+          if (!data.installed) {
+              statusText.innerHTML = '<span style="color: var(--danger);">IOPaint not installed</span>';
+              showToast('IOPaint is not installed. Install it with: pip install iopaint', 'danger');
+              return false;
+          }
+          
+          return true;
+      } catch (error) {
+          statusText.innerHTML = '<span style="color: var(--danger);">Error checking installation</span>';
+          console.error('Error checking IOPaint:', error);
+          return false;
+      }
+  }
+  
+  // Check server status
+  async function checkServerStatus() {
+      try {
+          const response = await fetch('/api/iopaint/status');
+          const data = await response.json();
+          
+          if (data.running) {
+              statusText.innerHTML = `<span style="color: var(--good);">Running on port ${data.port}</span>`;
+              if (serverControls) serverControls.style.display = 'none';
+              if (serverInfo) serverInfo.style.display = 'block';
+              if (serverPort) serverPort.textContent = data.port;
+              if (portInput) portInput.value = data.port;
+          } else {
+              statusText.innerHTML = '<span style="color: var(--muted);">Stopped</span>';
+              if (serverControls) serverControls.style.display = 'block';
+              if (serverInfo) serverInfo.style.display = 'none';
+              
+              // Check available devices
+              await checkAvailableDevices();
+          }
+      } catch (error) {
+          statusText.innerHTML = '<span style="color: var(--danger);">Error checking status</span>';
+          console.error('Error checking server status:', error);
+      }
+  }
+  
+  // Check available devices
+  async function checkAvailableDevices() {
+      try {
+          const response = await fetch('/api/iopaint/devices');
+          const data = await response.json();
+          
+          // Update device select options
+          if (deviceSelect) {
+              const cudaOption = deviceSelect.querySelector('option[value="cuda"]');
+              const mpsOption = deviceSelect.querySelector('option[value="mps"]');
+              
+              if (cudaOption) {
+                  cudaOption.disabled = !data.cuda;
+                  if (!data.cuda) {
+                      cudaOption.textContent = 'CUDA (Not Available)';
+                  }
+              }
+              
+              if (mpsOption) {
+                  mpsOption.disabled = !data.mps;
+                  if (!data.mps) {
+                      mpsOption.textContent = 'MPS (Not Available)';
+                  }
+              }
+              
+              // Select best available device
+              if (data.cuda) {
+                  deviceSelect.value = 'cuda';
+              } else if (data.mps) {
+                  deviceSelect.value = 'mps';
+              } else {
+                  deviceSelect.value = 'cpu';
+              }
+          }
+      } catch (error) {
+          console.error('Error checking devices:', error);
+      }
+  }
+  
+  // Start server
+  async function startServer() {
+      if (!startServerBtn) return;
+      startServerBtn.disabled = true;
+      startServerBtn.innerHTML = '<span class="spinner"></span> Starting...';
+      
+      try {
+          const response = await fetch('/api/iopaint/start', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                  model: modelSelect ? modelSelect.value : 'lama',
+                  device: deviceSelect ? deviceSelect.value : 'cpu',
+                  port: portInput ? parseInt(portInput.value) : 8080
+              })
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+              showToast('IOPaint server started successfully', 'good');
+              // Wait a moment for server to initialize
+              setTimeout(checkServerStatus, 1000);
+          } else {
+              showToast(`Failed to start server: ${data.error}`, 'danger');
+              startServerBtn.disabled = false;
+              startServerBtn.innerHTML = 'Start Server';
+          }
+      } catch (error) {
+          showToast(`Error starting server: ${error.message}`, 'danger');
+          startServerBtn.disabled = false;
+          startServerBtn.innerHTML = 'Start Server';
+      }
+  }
+  
+  // Stop server
+  async function stopServer() {
+      if (!stopServerBtn) return;
+      stopServerBtn.disabled = true;
+      stopServerBtn.innerHTML = '<span class="spinner"></span> Stopping...';
+      
+      try {
+          const response = await fetch('/api/iopaint/stop', {
+              method: 'POST'
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+              showToast('IOPaint server stopped', 'good');
+              setTimeout(checkServerStatus, 500);
+          } else {
+              showToast(`Failed to stop server: ${data.error}`, 'danger');
+          }
+      } catch (error) {
+          showToast(`Error stopping server: ${error.message}`, 'danger');
+      } finally {
+          stopServerBtn.disabled = false;
+          stopServerBtn.innerHTML = 'Stop Server';
+      }
+  }
+  
+  // Open IOPaint WebUI
+  function openIOPaint() {
+      const port = serverPort ? serverPort.textContent : (portInput ? portInput.value : '8080');
+      window.open(`http://localhost:${port}`, '_blank');
+  }
+  
+  // Add toast function if not exists
+  window.showToast = window.showToast || function(message, type = '') {
+      const toast = document.createElement('div');
+      toast.className = 'toast';
+      if (type) toast.classList.add(type);
+      toast.textContent = message;
+      document.body.appendChild(toast);
+      
+      setTimeout(() => {
+          toast.remove();
+      }, 3000);
+  };
+  
+  // Event listeners
+  if (startServerBtn) startServerBtn.addEventListener('click', startServer);
+  if (stopServerBtn) stopServerBtn.addEventListener('click', stopServer);
+  if (openIOPaintBtn) openIOPaintBtn.addEventListener('click', openIOPaint);
+  
+  // Initialize
+  async function init() {
+      const installed = await checkIOPaintInstallation();
+      if (installed) {
+          await checkServerStatus();
+          
+          // Check status every 10 seconds
+          setInterval(checkServerStatus, 10000);
+      }
+  }
+  
+  init();
 }
 
 // ----------------------

@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Optional
 import httpx
 import replicate
 from fastapi import FastAPI, File, Form, Header, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -1087,7 +1087,238 @@ async def api_demask(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# ---- UI ----
+# ==============================
+# IOPaint Integration (Corrected)
+# ==============================
+import subprocess
+import psutil
+import sys
+import asyncio
+from typing import Optional
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+# IOPaint process tracking
+iopaint_process: Optional[subprocess.Popen] = None
+
+@app.get("/api/iopaint/status")
+async def iopaint_status():
+    """Check if IOPaint server is running"""
+    global iopaint_process
+    
+    # Check if our tracked process is running
+    if iopaint_process and iopaint_process.poll() is None:
+        # Try to determine port from process arguments
+        port = 8080  # default
+        if iopaint_process.args:
+            for arg in iopaint_process.args:
+                if isinstance(arg, str) and '--port' in arg:
+                    try:
+                        if '=' in arg:
+                            port = int(arg.split('=')[1].strip('"\' '))
+                        elif iopaint_process.args.index(arg) + 1 < len(iopaint_process.args):
+                            port = int(iopaint_process.args[iopaint_process.args.index(arg) + 1])
+                    except (ValueError, IndexError):
+                        pass
+        return JSONResponse({'running': True, 'port': port})
+    
+    # Also check if any python process is running on typical IOPaint ports
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            cmdline = proc.info['cmdline'] or []
+            if any('iopaint' in str(part).lower() for part in cmdline):
+                port = 8080
+                for i, arg in enumerate(cmdline):
+                    if arg == '--port' and i + 1 < len(cmdline):
+                        try:
+                            port = int(cmdline[i + 1])
+                        except (ValueError, IndexError):
+                            pass
+                    elif '--port=' in arg:
+                        try:
+                            port = int(arg.split('=')[1])
+                        except (ValueError, IndexError):
+                            pass
+                return JSONResponse({'running': True, 'port': port})
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    return JSONResponse({'running': False})
+
+@app.post("/api/iopaint/start")
+async def iopaint_start(request: Request):
+    """Start IOPaint server"""
+    global iopaint_process
+    
+    if iopaint_process and iopaint_process.poll() is None:
+        return JSONResponse({'success': False, 'error': 'IOPaint is already running'})
+    
+    try:
+        data = await request.json()
+        model = data.get('model', 'lama')
+        device = data.get('device', 'cpu')
+        port = data.get('port', 8080)
+        
+        # First check if iopaint is installed
+        try:
+            subprocess.run([sys.executable, "-c", "import iopaint"], 
+                          check=True, capture_output=True, timeout=5)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            return JSONResponse({
+                'success': False, 
+                'error': 'IOPaint is not installed. Install with: pip install iopaint'
+            })
+        
+        # Build the command - CORRECTED: use "iopaint start" not "iopaint.run web"
+        iopaint_cmd = [
+            sys.executable, "-m", "iopaint", "start",
+            "--model", model,
+            "--device", device,
+            "--port", str(port),
+            "--host", "127.0.0.1"
+        ]
+        
+        print(f"[IOPaint] Starting with command: {' '.join(iopaint_cmd)}")
+        
+        # Start IOPaint in the background
+        iopaint_process = subprocess.Popen(
+            iopaint_cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            universal_newlines=True
+        )
+        
+        # Log process output asynchronously
+        async def log_output():
+            while iopaint_process and iopaint_process.poll() is None:
+                try:
+                    line = await asyncio.to_thread(iopaint_process.stdout.readline)
+                    if line:
+                        print(f"[IOPaint] {line.strip()}")
+                except Exception as e:
+                    print(f"[IOPaint Log Error] {e}")
+                    break
+        
+        asyncio.create_task(log_output())
+        
+        # Wait a moment to see if process starts successfully
+        await asyncio.sleep(2)
+        
+        if iopaint_process.poll() is not None:
+            # Process died immediately
+            stdout, stderr = "", ""
+            try:
+                stdout, stderr = iopaint_process.communicate(timeout=1)
+            except:
+                pass
+            error_msg = stderr or stdout or "Process terminated immediately"
+            iopaint_process = None
+            return JSONResponse({
+                'success': False, 
+                'error': f'IOPaint failed to start: {error_msg[:200]}'
+            })
+        
+        return JSONResponse({'success': True, 'port': port})
+    except Exception as e:
+        print(f"[IOPaint Start Error] {e}")
+        if iopaint_process:
+            try:
+                iopaint_process.terminate()
+                iopaint_process.wait(timeout=2)
+            except:
+                pass
+            iopaint_process = None
+        return JSONResponse({'success': False, 'error': str(e)})
+
+@app.post("/api/iopaint/stop")
+async def iopaint_stop():
+    """Stop IOPaint server"""
+    global iopaint_process
+    
+    if iopaint_process:
+        try:
+            # Kill the process tree
+            try:
+                parent = psutil.Process(iopaint_process.pid)
+                children = parent.children(recursive=True)
+                
+                for child in children:
+                    try:
+                        child.terminate()
+                    except:
+                        pass
+                
+                try:
+                    parent.terminate()
+                except:
+                    pass
+                
+                # Wait for processes to terminate
+                gone, alive = psutil.wait_procs([parent] + children, timeout=3)
+                for p in alive:
+                    try:
+                        p.kill()
+                    except:
+                        pass
+            except Exception:
+                # Fallback to simple termination
+                iopaint_process.terminate()
+                try:
+                    iopaint_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    iopaint_process.kill()
+            
+            iopaint_process = None
+            return JSONResponse({'success': True})
+        except Exception as e:
+            return JSONResponse({'success': False, 'error': str(e)})
+    
+    # Also try to find and kill any other iopaint processes
+    killed = False
+    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+        try:
+            cmdline = proc.info['cmdline'] or []
+            if any('iopaint' in str(part).lower() for part in cmdline):
+                try:
+                    proc.terminate()
+                    killed = True
+                except:
+                    pass
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            continue
+    
+    return JSONResponse({'success': killed, 'error': None if killed else 'No IOPaint process found'})
+
+@app.get("/api/iopaint/devices")
+async def iopaint_devices():
+    """Detect available devices for IOPaint"""
+    try:
+        import torch
+        devices = {
+            'cuda': torch.cuda.is_available(),
+            'mps': hasattr(torch.backends, 'mps') and torch.backends.mps.is_available() and torch.backends.mps.is_built()
+        }
+        return JSONResponse(devices)
+    except ImportError:
+        return JSONResponse({'cuda': False, 'mps': False})
+    except Exception as e:
+        return JSONResponse({'cuda': False, 'mps': False, 'error': str(e)})
+
+@app.get("/api/iopaint/check")
+async def iopaint_check():
+    """Check if IOPaint is installed"""
+    try:
+        import iopaint
+        # Try to get version in a safe way
+        version = getattr(iopaint, '__version__', 'unknown')
+        return JSONResponse({'installed': True, 'version': version})
+    except ImportError:
+        return JSONResponse({'installed': False})
+# ---------------------------
+# UI
+# ---------------------------
 app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
 app.mount("/uploads", StaticFiles(directory=str(UPLOADS_DIR)), name="uploads")
 
