@@ -956,12 +956,31 @@ async def api_demask(
 
         rep_client = replicate.Client(api_token=replicate_token)
 
+        # Programmatically fetch latest versions to avoid 404 errors
+        try:
+            model_pix2pix = await asyncio.to_thread(
+                rep_client.models.get, "timbrooks/instruct-pix2pix"
+            )
+            model_codeformer = await asyncio.to_thread(
+                rep_client.models.get, "sczhou/codeformer"
+            )
+            v_pix2pix = model_pix2pix.latest_version.id
+            v_codeformer = model_codeformer.latest_version.id
+        except Exception as me:
+            print(f"[ERROR] Failed to fetch Replicate model metadata: {me}")
+            # Use safe defaults if metadata fetch fails
+            v_pix2pix = (
+                "30c1d0b916a6f8efce20493f5d61ee27491ab2a60437c13c588468b9810ec23f"
+            )
+            v_codeformer = (
+                "7de2ea4a352033cfa2f21683c7a9511da922ec5ad9f9e61298d0b3dd16742617"
+            )
+
         try:
             # Using asyncio.to_thread because replicate-python is synchronous
-            # Using latest model versions instead of pinned hashes to avoid 404s
             output_1 = await asyncio.to_thread(
                 rep_client.run,
-                "timbrooks/instruct-pix2pix",
+                f"timbrooks/instruct-pix2pix:{v_pix2pix}",
                 input={
                     "image": b64_img,
                     "prompt": "remove the face mask, reveal the underlying face, forensic detail, high quality",
@@ -989,7 +1008,7 @@ async def api_demask(
                         file_url = cres.text.strip()
                         output_1 = await asyncio.to_thread(
                             rep_client.run,
-                            "timbrooks/instruct-pix2pix",
+                            f"timbrooks/instruct-pix2pix:{v_pix2pix}",
                             input={
                                 "image": file_url,
                                 "prompt": "remove the face mask, reveal the underlying face, forensic detail, high quality",
@@ -1018,7 +1037,7 @@ async def api_demask(
         try:
             output_2 = await asyncio.to_thread(
                 rep_client.run,
-                "sczhou/codeformer",
+                f"sczhou/codeformer:{v_codeformer}",
                 input={
                     "image": inpainted_url,
                     "upscale": 1,
