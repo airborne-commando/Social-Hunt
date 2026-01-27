@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any
+from typing import Any, Dict
 
 from .types import ProviderResult
+
 
 class BaseProvider(ABC):
     name: str = "base"
@@ -15,8 +16,14 @@ class BaseProvider(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def check(self, username: str, client, headers: Dict[str, str]) -> ProviderResult:
+    async def check(
+        self, username: str, client, headers: Dict[str, str]
+    ) -> ProviderResult:
         raise NotImplementedError
 
     def meta(self) -> Dict[str, Any]:
-        return {"name": self.name, "timeout": self.timeout, "ua_profile": self.ua_profile}
+        return {
+            "name": self.name,
+            "timeout": self.timeout,
+            "ua_profile": self.ua_profile,
+        }

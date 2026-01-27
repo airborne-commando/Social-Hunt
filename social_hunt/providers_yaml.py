@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
-from .types import ProviderResult, ResultStatus
+from .metadata import extract_counts_from_text, extract_json_ld, extract_opengraph
 from .providers_base import BaseProvider
-from .metadata import extract_opengraph, extract_json_ld, extract_counts_from_text
+from .types import ProviderResult, ResultStatus
 
 BLOCK_HINTS = [
     "captcha",
@@ -18,6 +18,7 @@ BLOCK_HINTS = [
     "security check",
     "please enable cookies",
 ]
+
 
 class PatternProvider(BaseProvider):
     def __init__(self, name: str, cfg: Dict[str, Any]):
@@ -32,7 +33,9 @@ class PatternProvider(BaseProvider):
     def build_url(self, username: str) -> str:
         return self._url_tpl.replace("{username}", username)
 
-    def _classify(self, content_lower: str, success_patterns: List[str], error_patterns: List[str]) -> ResultStatus:
+    def _classify(
+        self, content_lower: str, success_patterns: List[str], error_patterns: List[str]
+    ) -> ResultStatus:
         if any(h in content_lower for h in BLOCK_HINTS):
             return ResultStatus.BLOCKED
         if any(p.lower() in content_lower for p in error_patterns):
@@ -41,21 +44,31 @@ class PatternProvider(BaseProvider):
             return ResultStatus.FOUND
         return ResultStatus.UNKNOWN
 
-    async def check(self, username: str, client, headers: Dict[str, str]) -> ProviderResult:
+    async def check(
+        self, username: str, client, headers: Dict[str, str]
+    ) -> ProviderResult:
         url = self.build_url(username)
         start = time.monotonic()
         ts = datetime.now(timezone.utc).isoformat()
 
         try:
-            resp = await client.get(url, timeout=self.timeout, follow_redirects=True, headers=headers)
+            resp = await client.get(
+                url, timeout=self.timeout, follow_redirects=True, headers=headers
+            )
             raw_html = resp.text or ""
             text = raw_html.lower()
 
             # Substitute {username} in YAML patterns at runtime (without mutating provider)
-            success_patterns = [p.replace("{username}", username) for p in self.success_patterns]
-            error_patterns = [p.replace("{username}", username) for p in self.error_patterns]
+            success_patterns = [
+                p.replace("{username}", username) for p in self.success_patterns
+            ]
+            error_patterns = [
+                p.replace("{username}", username) for p in self.error_patterns
+            ]
 
-            status = self._classify(text, success_patterns=success_patterns, error_patterns=error_patterns)
+            status = self._classify(
+                text, success_patterns=success_patterns, error_patterns=error_patterns
+            )
 
             # small platform hints
             if self.name == "tiktok" and f"@{username.lower()}" in text:
