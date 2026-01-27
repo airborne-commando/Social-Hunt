@@ -981,9 +981,11 @@ async def api_demask(
                 f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
                 input={
                     "image": b64_img,
-                    "prompt": "remove the face mask, reveal the underlying face, forensic detail, high quality",
-                    "negative_prompt": "blurry, distorted, mask remains",
-                    "num_inference_steps": 30,
+                    "prompt": "remove medical face mask, reveal underlying skin and facial features, preserve original person identity, realistic face, high forensic detail",
+                    "negative_prompt": "change gender, different person, makeup, distorted, blurry, cartoon, mask remains, stylized",
+                    "num_inference_steps": 50,
+                    "image_guidance_scale": 1.6,
+                    "guidance_scale": 8.5,
                 },
             )
             # Ensure output is converted from FileOutput object to string URL
@@ -1013,9 +1015,11 @@ async def api_demask(
                             f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
                             input={
                                 "image": file_url,
-                                "prompt": "remove the face mask, reveal the underlying face, forensic detail, high quality",
-                                "negative_prompt": "blurry, distorted, mask remains",
-                                "num_inference_steps": 30,
+                                "prompt": "remove medical face mask, reveal underlying skin and facial features, preserve original person identity, realistic face, high forensic detail",
+                                "negative_prompt": "change gender, different person, makeup, distorted, blurry, cartoon, mask remains, stylized",
+                                "num_inference_steps": 50,
+                                "image_guidance_scale": 1.6,
+                                "guidance_scale": 8.5,
                             },
                         )
                         # Ensure output is converted from FileOutput object to string URL
@@ -1046,7 +1050,7 @@ async def api_demask(
                     "image": inpainted_url,
                     "upscale": 1,
                     "face_upsample": True,
-                    "codeformer_fidelity": 0.7,
+                    "codeformer_fidelity": 0.8,
                 },
             )
             # Ensure output is converted from FileOutput object to string URL
