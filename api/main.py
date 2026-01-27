@@ -985,17 +985,41 @@ async def api_demask(
                 },
             }
 
-            res = await client.post(
-                "https://api.replicate.com/v1/predictions",
-                headers=headers,
-                json=payload,
-                timeout=60.0,
-            )
-            if res.status_code != 201:
-                print(f"[ERROR] Demasking Step 1 failed: {res.text}")
+            res = None
+            for attempt in range(3):
+                try:
+                    res = await client.post(
+                        "https://api.replicate.com/v1/predictions",
+                        headers=headers,
+                        json=payload,
+                        timeout=60.0,
+                    )
+                    if res.status_code == 201:
+                        break  # Success
+                    print(
+                        f"[WARN] AI Step 1 attempt {attempt + 1}/3 failed with status {res.status_code}. Retrying..."
+                    )
+                except (
+                    httpx.RemoteProtocolError,
+                    httpx.ReadTimeout,
+                    httpx.ConnectError,
+                ) as e:
+                    print(
+                        f"[WARN] AI Step 1 attempt {attempt + 1}/3 failed with connection error: {e}. Retrying..."
+                    )
+                    if attempt >= 2:
+                        raise
+
+                if attempt < 2:
+                    await asyncio.sleep(2)
+
+            if res is None or res.status_code != 201:
+                error_text = res.text if res else "Connection Error"
+                status_code = res.status_code if res else 500
+                print(f"[ERROR] Demasking Step 1 failed: {error_text}")
                 raise HTTPException(
-                    status_code=res.status_code,
-                    detail=f"Replicate API Error: {res.text}",
+                    status_code=status_code,
+                    detail=f"Replicate API Error: {error_text}",
                 )
 
             prediction = res.json()
@@ -1039,13 +1063,35 @@ async def api_demask(
             }
 
             async with httpx.AsyncClient() as client:
-                res_cf = await client.post(
-                    "https://api.replicate.com/v1/predictions",
-                    headers=headers,
-                    json=payload_cf,
-                    timeout=60.0,
-                )
-                if res_cf.status_code == 201:
+                res_cf = None
+                for attempt in range(3):
+                    try:
+                        res_cf = await client.post(
+                            "https://api.replicate.com/v1/predictions",
+                            headers=headers,
+                            json=payload_cf,
+                            timeout=60.0,
+                        )
+                        if res_cf.status_code == 201:
+                            break  # Success
+                        print(
+                            f"[WARN] AI Step 2 attempt {attempt + 1}/3 failed with status {res_cf.status_code}. Retrying..."
+                        )
+                    except (
+                        httpx.RemoteProtocolError,
+                        httpx.ReadTimeout,
+                        httpx.ConnectError,
+                    ) as e:
+                        print(
+                            f"[WARN] AI Step 2 attempt {attempt + 1}/3 failed with connection error: {e}. Retrying..."
+                        )
+                        if attempt >= 2:
+                            raise
+
+                    if attempt < 2:
+                        await asyncio.sleep(2)
+
+                if res_cf and res_cf.status_code == 201:
                     pred_cf = res_cf.json()
                     poll_url_cf = pred_cf["urls"]["get"]
 
