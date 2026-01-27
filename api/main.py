@@ -956,34 +956,36 @@ async def api_demask(
 
         # Programmatically fetch latest versions to avoid 404 errors
         try:
-            model_sdxl = await asyncio.to_thread(
-                rep_client.models.get, "stability-ai/sdxl"
+            model_pix2pix = await asyncio.to_thread(
+                rep_client.models.get, "timothybrooks/instruct-pix2pix"
             )
             model_codeformer = await asyncio.to_thread(
                 rep_client.models.get, "sczhou/codeformer"
             )
-            v_sdxl = model_sdxl.latest_version.id
+            v_pix2pix = model_pix2pix.latest_version.id
             v_codeformer = model_codeformer.latest_version.id
         except Exception as me:
             print(f"[ERROR] Failed to fetch Replicate model metadata: {me}")
             # Use safe defaults if metadata fetch fails
-            v_sdxl = "da770e0c96602058444a10651717887e584f378a5e01c51e06d9d1956e18f2f2"
+            v_pix2pix = (
+                "30c1d0b916a6f8efce20493f5d61ee27491ab2a60437c13c588468b9810ec23f"
+            )
             v_codeformer = (
                 "7de2ea4a352033cfa2f21683c7a9511da922ec5ad9f9e61298d0b3dd16742617"
             )
 
         try:
-            # Using SDXL for Step 1 to avoid "jungle" hallucination and safety filter triggers
+            # Reverting to Pix2Pix with optimized forensic parameters to fix identity loss and distortion
             output_1 = await asyncio.to_thread(
                 rep_client.run,
-                f"stability-ai/sdxl:{v_sdxl}",
+                f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
                 input={
                     "image": b64_img,
-                    "prompt": "forensic portrait of a person's face, face mask removed, clear facial features, skin texture, highly detailed, realistic",
-                    "negative_prompt": "jungle, forest, trees, nature, landscape, balaclava, mask remains, distorted, blurry, cartoon, anime, makeup, change identity, change gender",
-                    "prompt_strength": 0.55,  # Balanced to keep identity while allowing changes
-                    "num_inference_steps": 40,
-                    "guidance_scale": 7.5,
+                    "prompt": "remove medical face mask, reveal the underlying human face, preserve identity, realistic features",
+                    "negative_prompt": "jungle, trees, nature, psychedelic, abstract, colorful, distorted, blurry, cartoon, mask remains, makeup, change gender",
+                    "num_inference_steps": 25,
+                    "image_guidance_scale": 1.35,  # Balanced: permits editing while keeping structure
+                    "guidance_scale": 7.0,  # Prevent aggressive hallucinations
                 },
             )
             # Ensure output is converted from FileOutput object to string URL
@@ -1010,14 +1012,14 @@ async def api_demask(
                         file_url = cres.text.strip()
                         output_1 = await asyncio.to_thread(
                             rep_client.run,
-                            f"stability-ai/sdxl:{v_sdxl}",
+                            f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
                             input={
                                 "image": file_url,
-                                "prompt": "forensic portrait of a person's face, face mask removed, clear facial features, skin texture, highly detailed, realistic",
-                                "negative_prompt": "jungle, forest, trees, nature, landscape, balaclava, mask remains, distorted, blurry, cartoon, anime, makeup, change identity, change gender",
-                                "prompt_strength": 0.55,
-                                "num_inference_steps": 40,
-                                "guidance_scale": 7.5,
+                                "prompt": "remove medical face mask, reveal the underlying human face, preserve identity, realistic features",
+                                "negative_prompt": "jungle, trees, nature, psychedelic, abstract, colorful, distorted, blurry, cartoon, mask remains, makeup, change gender",
+                                "num_inference_steps": 25,
+                                "image_guidance_scale": 1.35,
+                                "guidance_scale": 7.0,
                             },
                         )
                         # Ensure output is converted from FileOutput object to string URL
@@ -1048,7 +1050,7 @@ async def api_demask(
                     "image": inpainted_url,
                     "upscale": 1,
                     "face_upsample": True,
-                    "codeformer_fidelity": 0.8,
+                    "codeformer_fidelity": 0.65,  # Balanced fidelity for smoother blending
                 },
             )
             # Ensure output is converted from FileOutput object to string URL
