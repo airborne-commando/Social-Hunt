@@ -172,6 +172,49 @@ a:hover {
     padding: 6px 2px;
 }
 
+.menu-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.menu-group-header {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+    align-items: center;
+}
+
+.menu-toggle-btn {
+    width: auto;
+    padding: 10px 12px;
+    text-align: center;
+    font-weight: 700;
+}
+
+.menu-submenu {
+    display: none;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    margin-left: 6px;
+    gap: 6px;
+    flex-direction: column;
+}
+
+.menu-submenu.is-open {
+    display: flex;
+}
+
+.menu-sub-btn {
+    padding: 8px 10px;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.menu-sub-btn.active {
+    color: var(--text);
+}
+
 .menu-sep {
     height: 1px;
     background: var(--border);
@@ -205,6 +248,11 @@ a:hover {
 .menu-btn.active {
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255, 255, 255, 0.2);
+}
+
+.menu-btn.active-parent {
+    background: rgba(255, 255, 255, 0.04);
+    border-color: rgba(255, 255, 255, 0.16);
 }
 
 .menu-btn.danger {
@@ -556,6 +604,9 @@ tr:last-child td {
     .menu {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+    .menu-group {
+        grid-column: 1 / -1;
     }
     .row {
         flex-direction: column;
