@@ -1419,7 +1419,7 @@ class DeepMosaicService:
             print(f"[DeepMosaic] Processing: {input_path}")
             print(f"[DeepMosaic] Mode: {mode}, Quality: {quality}")
             
-            # Build command
+            # Build command - START WITH BASIC PARAMETERS
             cmd = [
                 sys.executable, "-u", "deepmosaic.py",
                 "--media_path", str(input_path),
@@ -1429,26 +1429,53 @@ class DeepMosaicService:
                 "--no_preview"
             ]
             
-            # Add mode-specific parameters
+            # Add mode-specific parameters CORRECTLY
             if mode == "add":
+                # For add mode, we need model and mosaic type
+                add_model = self.deepmosaic_dir / "pretrained_models" / "mosaic" / "add_face.pth"
+                if add_model.exists():
+                    cmd.extend(["--model_path", str(add_model)])
+                
                 cmd.extend(["--mosaic_mod", mosaic_type])
+                
+                # Adjust quality settings for add mode
                 if quality == "high":
-                    cmd.extend(["--mask_extend", "5"])
+                    cmd.extend(["--mask_extend", "5"])  # More precise
                 elif quality == "low":
-                    cmd.extend(["--mask_extend", "20"])
-                else:
+                    cmd.extend(["--mask_extend", "20"])  # Faster
+                else:  # medium
                     cmd.extend(["--mask_extend", "10"])
             
             elif mode == "clean":
-                if quality == "high":
+                # For clean mode, we need the clean model
+                # Try different clean models
+                clean_models = [
+                    self.deepmosaic_dir / "pretrained_models" / "mosaic" / "clean_face_HD.pth",
+                    self.deepmosaic_dir / "pretrained_models" / "mosaic" / "clean_youknow_v1.pth",
+                ]
+                
+                for model in clean_models:
+                    if model.exists():
+                        cmd.extend(["--model_path", str(model)])
+                        break
+                
+                # ONLY add traditional parameters if user explicitly chooses "traditional" quality
+                # But wait - traditional is a separate option, not quality!
+                # Actually, looking at DeepMosaic docs:
+                # --traditional: if specified, use traditional image processing methods to clean mosaic
+                # So we should only add --traditional if quality == "traditional"
+                
+                # Let's map quality to DeepMosaic parameters differently:
+                if quality == "traditional":
+                    # Use traditional method (non-AI)
                     cmd.extend(["--traditional"])
-                elif quality == "low":
-                    cmd.extend(["--tr_blur", "15", "--tr_down", "15"])
-                else:
+                    # Add traditional parameters based on quality "level"
                     cmd.extend(["--tr_blur", "10", "--tr_down", "10"])
+                # else: use AI model (default)
             
             elif mode == "style":
-                style_model = self.deepmosaic_dir / "pretrained_models" / "style" / "style_monet.pth"
+                # For style transfer
+                style_model = self.deepmosaic_dir / "pretrained_models" / "style" / "candy.pth"
                 if style_model.exists():
                     cmd.extend(["--model_path", str(style_model)])
                 
@@ -1456,8 +1483,11 @@ class DeepMosaicService:
                     cmd.extend(["--output_size", "1024"])
                 elif quality == "low":
                     cmd.extend(["--output_size", "256"])
-                else:
+                else:  # medium
                     cmd.extend(["--output_size", "512"])
+            
+            # Add GPU if available (optional)
+            # cmd.extend(["--gpu_id", "0"])  # Uncomment if you have GPU
             
             print(f"[DeepMosaic] Command: {' '.join(cmd)}")
             print(f"[DeepMosaic] Working directory: {self.deepmosaic_dir}")
@@ -1470,6 +1500,8 @@ class DeepMosaicService:
                 stdin=asyncio.subprocess.DEVNULL,
                 cwd=str(self.deepmosaic_dir)
             )
+        
+        # Rest of the function remains the same...
             
             # Set timeout
             try:

@@ -29,11 +29,14 @@
                     <label style="display: block; margin-bottom: 8px;">
                         <input type="radio" name="dmMode" value="style"> Style Transfer
                     </label>
+                    <label style="display: block; margin-bottom: 8px;">
+                        <input type="radio" name="dmMode" value="traditional"> Traditional (Non-AI)
+                    </label>
                 </div>
                 
-                <h3>Advanced Options</h3>
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 4px;">Mosaic Type (for Add mode):</label>
+                <!-- Show mosaic type options only for "add" mode -->
+                <div id="dmMosaicTypeContainer" style="margin-bottom: 12px; display: none;">
+                    <label style="display: block; margin-bottom: 4px;">Mosaic Type:</label>
                     <select id="dmMosaicType" style="width: 100%;">
                         <option value="squa_avg">Square Average</option>
                         <option value="squa_random">Square Random</option>
@@ -43,12 +46,33 @@
                     </select>
                 </div>
                 
-                <div style="margin-bottom: 12px;">
-                    <label style="display: block; margin-bottom: 4px;">Quality:</label>
+                <!-- Show quality options for non-traditional modes -->
+                <div id="dmQualityContainer" style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Quality/Intensity:</label>
                     <select id="dmQuality" style="width: 100%;">
                         <option value="high">High (Slow)</option>
                         <option value="medium" selected>Medium</option>
                         <option value="low">Low (Fast)</option>
+                    </select>
+                </div>
+                
+                <!-- Show traditional options only for "traditional" mode -->
+                <div id="dmTraditionalOptions" style="margin-bottom: 12px; display: none;">
+                    <label style="display: block; margin-bottom: 4px;">Blur Intensity:</label>
+                    <select id="dmTrBlur" style="width: 100%;">
+                        <option value="5">Very Light</option>
+                        <option value="10" selected>Light</option>
+                        <option value="15">Medium</option>
+                        <option value="20">Strong</option>
+                        <option value="25">Very Strong</option>
+                    </select>
+                    
+                    <label style="display: block; margin-bottom: 4px; margin-top: 8px;">Downsample Factor:</label>
+                    <select id="dmTrDown" style="width: 100%;">
+                        <option value="5">Minimal</option>
+                        <option value="10" selected>Normal</option>
+                        <option value="15">Aggressive</option>
+                        <option value="20">Maximum</option>
                     </select>
                 </div>
                 
@@ -83,18 +107,56 @@
             <li><strong>Mosaic Removal:</strong> Intelligently reconstruct faces and objects under mosaic/blur</li>
             <li><strong>Mosaic Addition:</strong> Apply mosaic to specific regions (e.g., face anonymization)</li>
             <li><strong>Style Transfer:</strong> Apply artistic styles to images/videos</li>
+            <li><strong>Traditional Processing:</strong> Non-AI mosaic removal using image processing</li>
+        </ul>
+        
+        <h4 style="margin-top: 15px;">Mode Details:</h4>
+        <ul style="padding-left: 20px; font-size: 13px; color: var(--muted);">
+            <li><strong>Clean:</strong> AI-based mosaic removal (requires clean_face_HD.pth or clean_youknow_v1.pth)</li>
+            <li><strong>Add:</strong> Add mosaic to images (requires add_face.pth)</li>
+            <li><strong>Style:</strong> Apply artistic style (requires candy.pth or other style models)</li>
+            <li><strong>Traditional:</strong> Non-AI method using blur/downsample - works without models</li>
         </ul>
         
         <h4 style="margin-top: 15px;">Tips:</h4>
         <ul style="padding-left: 20px; font-size: 13px; color: var(--muted);">
             <li>For best results, use clear, well-lit images</li>
             <li>Video processing may take several minutes depending on length</li>
-            <li>Use "Traditional" mode for simpler mosaics, "Pix2Pix" for complex reconstruction</li>
+            <li>Download models from DeepMosaic repository and place in pretrained_models/</li>
+            <li>Traditional mode works without AI models</li>
             <li>Results are saved in the History section</li>
         </ul>
     </div>
 </div>
 
 <script>
-// JavaScript for DeepMosaic will be loaded separately
+// JavaScript for DeepMosaic - updated to handle different modes
+document.addEventListener('DOMContentLoaded', function() {
+    const modeRadios = document.querySelectorAll('input[name="dmMode"]');
+    const mosaicTypeContainer = document.getElementById('dmMosaicTypeContainer');
+    const qualityContainer = document.getElementById('dmQualityContainer');
+    const traditionalOptions = document.getElementById('dmTraditionalOptions');
+    
+    // Show/hide options based on selected mode
+    function updateModeOptions() {
+        const selectedMode = document.querySelector('input[name="dmMode"]:checked').value;
+        
+        // Show mosaic type only for "add" mode
+        mosaicTypeContainer.style.display = selectedMode === 'add' ? 'block' : 'none';
+        
+        // Show quality for all except "traditional"
+        qualityContainer.style.display = selectedMode !== 'traditional' ? 'block' : 'none';
+        
+        // Show traditional options only for "traditional" mode
+        traditionalOptions.style.display = selectedMode === 'traditional' ? 'block' : 'none';
+    }
+    
+    // Add event listeners to mode radios
+    modeRadios.forEach(radio => {
+        radio.addEventListener('change', updateModeOptions);
+    });
+    
+    // Initialize
+    updateModeOptions();
+});
 </script>
