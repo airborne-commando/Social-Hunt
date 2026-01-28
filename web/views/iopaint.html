@@ -357,7 +357,7 @@
         function openIOPaint() {
             const port = serverPort.textContent || portInput.value;
             void port;
-            window.open("/iopaint/", "_blank");
+            window.open(`/iopaint/?v=${Date.now()}`, "_blank");
         }
 
         // Event listeners
