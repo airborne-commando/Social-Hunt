@@ -1,0 +1,100 @@
+<div class="grid">
+    <div class="card">
+        <h2>DeepMosaic Integration</h2>
+        <p class="muted">AI-powered mosaic detection, removal, and application using DeepMosaic.</p>
+        
+        <div class="row" style="gap: 15px; margin-top: 20px;">
+            <div style="flex: 1; min-width: 200px;">
+                <h3>Upload Image/Video</h3>
+                <input type="file" id="dmUpload" accept="image/*,video/*" style="margin-bottom: 12px;">
+                <div id="dmPreview" style="margin: 10px 0; text-align: center;"></div>
+            </div>
+            
+            <div id="dmStatusInfo" class="card" style="margin-top: 20px; background: var(--panel3);">
+                <h4>System Status</h4>
+                <div id="dmStatusContent">
+                    <div class="spinner"></div> Loading DeepMosaic status...
+                </div>
+                <button class="btn small" id="dmRefreshStatus" style="margin-top: 10px;">Refresh Status</button>
+            </div>
+            <div style="flex: 1; min-width: 200px;">
+                <h3>Processing Mode</h3>
+                <div style="margin-bottom: 15px;">
+                    <label style="display: block; margin-bottom: 8px;">
+                        <input type="radio" name="dmMode" value="clean" checked> Clean (Remove Mosaic)
+                    </label>
+                    <label style="display: block; margin-bottom: 8px;">
+                        <input type="radio" name="dmMode" value="add"> Add Mosaic
+                    </label>
+                    <label style="display: block; margin-bottom: 8px;">
+                        <input type="radio" name="dmMode" value="style"> Style Transfer
+                    </label>
+                </div>
+                
+                <h3>Advanced Options</h3>
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Mosaic Type (for Add mode):</label>
+                    <select id="dmMosaicType" style="width: 100%;">
+                        <option value="squa_avg">Square Average</option>
+                        <option value="squa_random">Square Random</option>
+                        <option value="squa_avg_circle_edge">Square with Circle Edge</option>
+                        <option value="rect_avg">Rectangle Average</option>
+                        <option value="random">Random</option>
+                    </select>
+                </div>
+                
+                <div style="margin-bottom: 12px;">
+                    <label style="display: block; margin-bottom: 4px;">Quality:</label>
+                    <select id="dmQuality" style="width: 100%;">
+                        <option value="high">High (Slow)</option>
+                        <option value="medium" selected>Medium</option>
+                        <option value="low">Low (Fast)</option>
+                    </select>
+                </div>
+                
+                <button class="btn good" id="dmProcessBtn" style="width: 100%; margin-top: 15px;">
+                    Start Processing
+                </button>
+            </div>
+        </div>
+        
+        <div id="dmStatus" style="margin-top: 20px; padding: 12px; border-radius: 8px; background: var(--panel3); display: none;">
+            <div id="dmStatusText"></div>
+            <div id="dmProgress" style="margin-top: 10px;"></div>
+        </div>
+        
+        <div id="dmResults" style="margin-top: 20px; display: none;">
+            <h3>Results</h3>
+            <div id="dmResultPreview" style="text-align: center; margin: 20px 0;">
+                <!-- Results will appear here -->
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <button class="btn" id="dmDownloadBtn">Download Result</button>
+                <button class="btn" id="dmSaveNotesBtn">Save to Notes</button>
+                <button class="btn" id="dmClearBtn">Clear</button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="card">
+        <h3>About DeepMosaic</h3>
+        <p>DeepMosaic is an AI tool for:</p>
+        <ul style="padding-left: 20px; line-height: 1.6;">
+            <li><strong>Mosaic Removal:</strong> Intelligently reconstruct faces and objects under mosaic/blur</li>
+            <li><strong>Mosaic Addition:</strong> Apply mosaic to specific regions (e.g., face anonymization)</li>
+            <li><strong>Style Transfer:</strong> Apply artistic styles to images/videos</li>
+        </ul>
+        
+        <h4 style="margin-top: 15px;">Tips:</h4>
+        <ul style="padding-left: 20px; font-size: 13px; color: var(--muted);">
+            <li>For best results, use clear, well-lit images</li>
+            <li>Video processing may take several minutes depending on length</li>
+            <li>Use "Traditional" mode for simpler mosaics, "Pix2Pix" for complex reconstruction</li>
+            <li>Results are saved in the History section</li>
+        </ul>
+    </div>
+</div>
+
+<script>
+// JavaScript for DeepMosaic will be loaded separately
+</script>

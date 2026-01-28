@@ -1,3 +1,4 @@
+# main.py
 from __future__ import annotations
 
 import asyncio
@@ -1316,6 +1317,463 @@ async def iopaint_check():
         return JSONResponse({'installed': True, 'version': version})
     except ImportError:
         return JSONResponse({'installed': False})
+
+# ==============================
+# DeepMosaic Integration
+# ==============================
+
+# Replace the DeepMosaicService class in main.py with this updated version:
+
+# Updated DeepMosaicService class for main.py
+# Updated DeepMosaicService class with correct path handling
+class DeepMosaicService:
+    def __init__(self, deepmosaic_path: str = None):
+        # First, try to find the DeepMosaic directory
+        possible_dirs = [
+            APP_ROOT / "DeepMosaics",
+            APP_ROOT / "../DeepMosaics",
+            Path("/home/nicholas/Desktop/SSD/AI/Social-Hunt/DeepMosaics"),
+            Path("DeepMosaics"),
+            Path("../DeepMosaics"),
+        ]
+        
+        deepmosaic_dir = None
+        for dir_path in possible_dirs:
+            dir_path = dir_path.resolve()
+            if dir_path.exists() and (dir_path / "deepmosaic.py").exists():
+                deepmosaic_dir = dir_path
+                break
+        
+        if not deepmosaic_dir:
+            raise FileNotFoundError("DeepMosaic directory not found. Expected: Social-Hunt/DeepMosaics/")
+        
+        # Set the deepmosaic.py path
+        deepmosaic_path = deepmosaic_dir / "deepmosaic.py"
+        
+        if not deepmosaic_path.exists():
+            raise FileNotFoundError(f"deepmosaic.py not found at: {deepmosaic_path}")
+        
+        self.deepmosaic_path = str(deepmosaic_path)
+        self.deepmosaic_dir = deepmosaic_dir
+        self.results_dir = APP_ROOT / "data" / "deepmosaic_results"
+        self.results_dir.mkdir(parents=True, exist_ok=True)
+        
+        print(f"[INFO] DeepMosaic directory: {self.deepmosaic_dir}")
+        print(f"[INFO] DeepMosaic script: {self.deepmosaic_path}")
+        
+        # Check for models
+        self.check_models()
+    
+    def check_models(self):
+        """Check if models exist and provide guidance"""
+        models_dir = self.deepmosaic_dir / "pretrained_models"
+        
+        if not models_dir.exists():
+            print(f"[WARN] Models directory not found: {models_dir}")
+            print("[INFO] Creating symlink to models in Social-Hunt root...")
+            
+            root_models = APP_ROOT / "pretrained_models"
+            if root_models.exists():
+                try:
+                    models_dir.symlink_to(root_models, target_is_directory=True)
+                    print(f"[INFO] Created symlink: {models_dir} -> {root_models}")
+                except Exception as e:
+                    print(f"[ERROR] Failed to create symlink: {e}")
+                    print(f"[INFO] You can manually create it: ln -s ../pretrained_models {models_dir}")
+            else:
+                print("[ERROR] No models found in Social-Hunt root either!")
+                print("[INFO] Please download models and place them in either:")
+                print(f"[INFO]   1. {models_dir}")
+                print(f"[INFO]   2. {APP_ROOT / 'pretrained_models'}")
+                print("[INFO] Download from: https://github.com/HypoX64/DeepMosaics")
+        
+        # Check for essential models
+        essential_models = [
+            models_dir / "mosaic" / "clean_youknow_v1.pth",
+            models_dir / "mosaic" / "add_face.pth",
+            models_dir / "style" / "style_monet.pth",
+        ]
+        
+        for model in essential_models:
+            if not model.exists():
+                print(f"[WARN] Missing model: {model}")
+    
+    async def process_image(
+        self,
+        input_path: str,
+        mode: str = "clean",
+        mosaic_type: str = "squa_avg",
+        quality: str = "medium",
+        output_format: str = "png"
+    ) -> Dict[str, Any]:
+        """Process a single image with DeepMosaic"""
+        try:
+            # Generate unique output filename
+            job_id = str(uuid.uuid4())
+            output_dir = self.results_dir / job_id
+            output_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Convert input_path to absolute path
+            input_path = Path(input_path).resolve()
+            
+            print(f"[DeepMosaic] Processing: {input_path}")
+            print(f"[DeepMosaic] Mode: {mode}, Quality: {quality}")
+            
+            # Build command
+            cmd = [
+                sys.executable, "-u", "deepmosaic.py",
+                "--media_path", str(input_path),
+                "--mode", mode,
+                "--result_dir", str(output_dir),
+                "--temp_dir", str(output_dir / "temp"),
+                "--no_preview"
+            ]
+            
+            # Add mode-specific parameters
+            if mode == "add":
+                cmd.extend(["--mosaic_mod", mosaic_type])
+                if quality == "high":
+                    cmd.extend(["--mask_extend", "5"])
+                elif quality == "low":
+                    cmd.extend(["--mask_extend", "20"])
+                else:
+                    cmd.extend(["--mask_extend", "10"])
+            
+            elif mode == "clean":
+                if quality == "high":
+                    cmd.extend(["--traditional"])
+                elif quality == "low":
+                    cmd.extend(["--tr_blur", "15", "--tr_down", "15"])
+                else:
+                    cmd.extend(["--tr_blur", "10", "--tr_down", "10"])
+            
+            elif mode == "style":
+                style_model = self.deepmosaic_dir / "pretrained_models" / "style" / "style_monet.pth"
+                if style_model.exists():
+                    cmd.extend(["--model_path", str(style_model)])
+                
+                if quality == "high":
+                    cmd.extend(["--output_size", "1024"])
+                elif quality == "low":
+                    cmd.extend(["--output_size", "256"])
+                else:
+                    cmd.extend(["--output_size", "512"])
+            
+            print(f"[DeepMosaic] Command: {' '.join(cmd)}")
+            print(f"[DeepMosaic] Working directory: {self.deepmosaic_dir}")
+            
+            # Run DeepMosaic
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                stdin=asyncio.subprocess.DEVNULL,
+                cwd=str(self.deepmosaic_dir)
+            )
+            
+            # Set timeout
+            try:
+                stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                print("[DeepMosaic] Timeout, terminating...")
+                process.terminate()
+                try:
+                    await asyncio.wait_for(process.wait(), timeout=10)
+                except asyncio.TimeoutError:
+                    process.kill()
+                    await process.wait()
+                raise Exception("Processing timeout (5 minutes)")
+            
+            stdout_str = stdout.decode('utf-8', errors='ignore')
+            stderr_str = stderr.decode('utf-8', errors='ignore')
+            
+            print(f"[DeepMosaic] Exit code: {process.returncode}")
+            
+            if process.returncode != 0:
+                error_msg = stderr_str or stdout_str or "Unknown error"
+                if "Model does not exist" in error_msg:
+                    raise Exception(f"Models missing. Check {self.deepmosaic_dir / 'pretrained_models'}")
+                raise Exception(f"DeepMosaic error: {error_msg[:500]}")
+            
+            # Find output
+            output_files = list(output_dir.glob("*"))
+            output_files = [f for f in output_files if f.is_file()]
+            
+            if output_files:
+                output_files.sort(key=lambda f: f.stat().st_mtime, reverse=True)
+                output_path = output_files[0]
+                
+                print(f"[DeepMosaic] Output: {output_path}")
+                
+                return {
+                    "success": True,
+                    "job_id": job_id,
+                    "output_path": str(output_path),
+                    "stdout": stdout_str[:1000],  # Limit size
+                    "stderr": stderr_str[:1000],
+                }
+            else:
+                raise Exception("No output file generated")
+                
+        except Exception as e:
+            print(f"[DeepMosaic Error] {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+# Initialize DeepMosaic service
+try:
+    deepmosaic_service = DeepMosaicService("DeepMosaics/deepmosaic.py")
+    print("[INFO] DeepMosaic service initialized successfully")
+except Exception as e:
+    print(f"[WARN] Failed to initialize DeepMosaic: {e}")
+    deepmosaic_service = None
+
+# DeepMosaic API endpoints
+@app.get("/api/deepmosaic/status")
+async def api_deepmosaic_status():
+    """Check DeepMosaic availability"""
+    return {
+        "available": deepmosaic_service is not None,
+        "message": "DeepMosaic ready" if deepmosaic_service else "DeepMosaic not available",
+        "details": {
+            "service_initialized": deepmosaic_service is not None,
+            "module_path": deepmosaic_service.deepmosaic_path if deepmosaic_service else None
+        }
+    }
+
+@app.post("/api/deepmosaic/process")
+async def api_deepmosaic_process(
+    file: UploadFile = File(...),
+    mode: str = Form("clean"),
+    mosaic_type: str = Form("squa_avg"),
+    quality: str = Form("medium"),
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
+    """
+    Process image/video with DeepMosaic
+    """
+    require_admin(x_plugin_token)
+    
+    if not deepmosaic_service:
+        raise HTTPException(status_code=500, detail="DeepMosaic service not available")
+    
+    # Save uploaded file
+    temp_dir = Path("temp/deepmosaic")
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Sanitize filename
+    safe_filename = _safe_name(file.filename or "upload")
+    input_path = temp_dir / safe_filename
+    content = await file.read()
+    input_path.write_bytes(content)
+    
+    print(f"[DeepMosaic] Processing file: {safe_filename}, size: {len(content)} bytes, mode: {mode}")
+    
+    # Determine if it's an image or video
+    file_ext = input_path.suffix.lower()
+    is_video = file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.webm', '.flv', '.wmv']
+    
+    try:
+        if is_video:
+            print(f"[DeepMosaic] Processing as video: {safe_filename}")
+            result = await deepmosaic_service.process_video(
+                input_path=str(input_path),
+                mode=mode,
+                mosaic_type=mosaic_type,
+                quality=quality
+            )
+        else:
+            print(f"[DeepMosaic] Processing as image: {safe_filename}")
+            result = await deepmosaic_service.process_image(
+                input_path=str(input_path),
+                mode=mode,
+                mosaic_type=mosaic_type,
+                quality=quality
+            )
+        
+        if not result.get("success"):
+            error_msg = result.get("error", "Unknown error")
+            print(f"[DeepMosaic] Processing failed: {error_msg}")
+            raise HTTPException(status_code=500, detail=f"DeepMosaic processing failed: {error_msg}")
+        
+        # Return the processed file
+        output_path = Path(result["output_path"])
+        if output_path.exists():
+            print(f"[DeepMosaic] Returning result file: {output_path}")
+            
+            # Determine content type
+            if is_video:
+                media_type = "video/mp4"
+                if output_path.suffix.lower() == '.avi':
+                    media_type = "video/x-msvideo"
+                elif output_path.suffix.lower() == '.mov':
+                    media_type = "video/quicktime"
+                elif output_path.suffix.lower() == '.webm':
+                    media_type = "video/webm"
+            else:
+                media_type = "image/png"
+                if output_path.suffix.lower() in ['.jpg', '.jpeg']:
+                    media_type = "image/jpeg"
+                elif output_path.suffix.lower() == '.bmp':
+                    media_type = "image/bmp"
+                elif output_path.suffix.lower() == '.tiff':
+                    media_type = "image/tiff"
+                elif output_path.suffix.lower() == '.webp':
+                    media_type = "image/webp"
+            
+            return FileResponse(
+                path=output_path,
+                media_type=media_type,
+                filename=f"deepmosaic_{mode}_{safe_filename}",
+                headers={
+                    "X-Job-ID": result.get("job_id", ""),
+                    "X-Output-Path": str(output_path)
+                }
+            )
+        else:
+            print(f"[DeepMosaic] Output file not found: {output_path}")
+            raise HTTPException(status_code=500, detail="Output file not found")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[DeepMosaic] Unhandled exception: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+    finally:
+        # Cleanup temp file
+        try:
+            if input_path.exists():
+                input_path.unlink()
+                print(f"[DeepMosaic] Cleaned up temp file: {input_path}")
+        except Exception as e:
+            print(f"[DeepMosaic] Failed to cleanup temp file: {e}")
+
+@app.get("/api/deepmosaic/jobs/{job_id}/download")
+async def api_deepmosaic_download(
+    job_id: str,
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
+    """
+    Download a previously processed DeepMosaic result
+    """
+    require_admin(x_plugin_token)
+    
+    if not deepmosaic_service:
+        raise HTTPException(status_code=500, detail="DeepMosaic service not available")
+    
+    # Check if job result exists in the results directory
+    result_path = deepmosaic_service.results_dir / job_id
+    
+    if result_path.is_dir():
+        # Look for files in the job directory
+        files = list(result_path.glob("*"))
+        # Filter out directories and hidden files
+        files = [f for f in files if f.is_file() and not f.name.startswith('.')]
+        
+        if files:
+            # Find the largest file (likely the main output)
+            files.sort(key=lambda f: f.stat().st_size, reverse=True)
+            output_file = files[0]
+            
+            # Determine content type
+            if output_file.suffix.lower() in ['.mp4', '.avi', '.mov', '.mkv', '.webm']:
+                media_type = "video/mp4"
+                if output_file.suffix.lower() == '.avi':
+                    media_type = "video/x-msvideo"
+                elif output_file.suffix.lower() == '.mov':
+                    media_type = "video/quicktime"
+                elif output_file.suffix.lower() == '.webm':
+                    media_type = "video/webm"
+            else:
+                media_type = "image/png"
+                if output_file.suffix.lower() in ['.jpg', '.jpeg']:
+                    media_type = "image/jpeg"
+                elif output_file.suffix.lower() == '.bmp':
+                    media_type = "image/bmp"
+                elif output_file.suffix.lower() == '.tiff':
+                    media_type = "image/tiff"
+                elif output_file.suffix.lower() == '.webp':
+                    media_type = "image/webp"
+            
+            return FileResponse(
+                path=output_file,
+                media_type=media_type,
+                filename=f"deepmosaic_{job_id}{output_file.suffix}"
+            )
+    
+    # Also check for direct file (for older jobs)
+    possible_files = [
+        deepmosaic_service.results_dir / f"{job_id}.png",
+        deepmosaic_service.results_dir / f"{job_id}.jpg",
+        deepmosaic_service.results_dir / f"{job_id}.mp4",
+        deepmosaic_service.results_dir / f"{job_id}.avi",
+    ]
+    
+    for file_path in possible_files:
+        if file_path.exists():
+            # Determine content type
+            if file_path.suffix.lower() in ['.mp4', '.avi']:
+                media_type = "video/mp4" if file_path.suffix.lower() == '.mp4' else "video/x-msvideo"
+            else:
+                media_type = "image/png" if file_path.suffix.lower() == '.png' else "image/jpeg"
+            
+            return FileResponse(
+                path=file_path,
+                media_type=media_type,
+                filename=file_path.name
+            )
+    
+    raise HTTPException(status_code=404, detail="Job result not found")
+
+@app.get("/api/deepmosaic/jobs/{job_id}/info")
+async def api_deepmosaic_job_info(
+    job_id: str,
+    x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
+):
+    """
+    Get information about a DeepMosaic job
+    """
+    require_admin(x_plugin_token)
+    
+    if not deepmosaic_service:
+        raise HTTPException(status_code=500, detail="DeepMosaic service not available")
+    
+    result_path = deepmosaic_service.results_dir / job_id
+    
+    info = {
+        "job_id": job_id,
+        "exists": False,
+        "is_directory": False,
+        "files": []
+    }
+    
+    if result_path.exists():
+        info["exists"] = True
+        info["is_directory"] = result_path.is_dir()
+        
+        if result_path.is_dir():
+            files = list(result_path.glob("*"))
+            info["files"] = [
+                {
+                    "name": f.name,
+                    "size": f.stat().st_size,
+                    "modified": f.stat().st_mtime,
+                    "is_file": f.is_file()
+                }
+                for f in files
+            ]
+        else:
+            info["files"] = [{
+                "name": result_path.name,
+                "size": result_path.stat().st_size,
+                "modified": result_path.stat().st_mtime,
+                "is_file": True
+            }]
+    
+    return info
+
 # ---------------------------
 # UI
 # ---------------------------
