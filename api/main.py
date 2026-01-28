@@ -22,7 +22,7 @@ from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api.settings_store import SettingsStore, mask_for_client
+from api.settings_store import SECRET_KEYS_FIELD, SettingsStore, mask_for_client
 from social_hunt.addons_registry import build_addon_registry, load_enabled_addons
 from social_hunt.engine import SocialHuntEngine
 from social_hunt.face_utils import image_to_base64_uri, restore_face
@@ -745,8 +745,17 @@ async def api_put_settings(
 
     current = settings_store.load()
     for k, v in req.settings.items():
+        key = str(k)
+        # allow deleting by setting null
+        if v is None:
+            current.pop(key, None)
+            continue
+        if key == SECRET_KEYS_FIELD:
+            if isinstance(v, list):
+                current[key] = [str(x) for x in v if str(x).strip()]
+            continue
         # allow clearing by empty string
-        current[str(k)] = v
+        current[key] = v
 
     settings_store.save(current)
     return {"ok": True}
@@ -1945,4 +1954,3 @@ async def api_public_theme():
 @app.get("/login")
 async def login_page():
     return FileResponse(str(WEB_DIR / "login.html"))
-
