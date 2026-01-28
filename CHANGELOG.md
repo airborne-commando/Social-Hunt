@@ -13,6 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 -   Apache example config for `/iopaint` + `/sh-api`, including ModSecurity exception and upload limits.
 -   Git ignore rule for local `_backup_*/` folders.
 -   Nginx reverse proxy guide and docker-compose optional IOPaint service.
+-   Canary warrant template, PGP key placeholder, and OSINT news digest template.
 
 ## [2.2.0"] - 2026-01-27
 

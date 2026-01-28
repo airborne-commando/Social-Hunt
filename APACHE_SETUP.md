@@ -225,7 +225,7 @@ Social-Hunt API to `/sh-api` (so IOPaint can use `/api` and `/socket.io`).
 </VirtualHost>
 ```
 
-## 7) (Recommended) Put auth in front of it (so it can’t be abused)
+## 7) (Recommended) Put auth in front of it (so it can't be abused)
 
 ### Option A: Basic Auth in Apache (fast)
 
@@ -270,7 +270,7 @@ sudo systemctl reload apache2
 
 ## 8) Optional: Apache-side request limits
 
-These don’t replace app-side limits, but they help keep the proxy stable:
+These don't replace app-side limits, but they help keep the proxy stable:
 
 ```apache
 # Timeouts for slow clients

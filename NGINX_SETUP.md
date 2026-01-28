@@ -13,7 +13,7 @@ sudo apt install -y nginx
 ## 2) Example server block (HTTPS + /iopaint)
 
 Use this when Social-Hunt is on `127.0.0.1:8000` and IOPaint is on
-`127.0.0.1:8080`. Social-Hunt’s API is served under `/sh-api`.
+`127.0.0.1:8080`. Social-Hunt's API is served under `/sh-api`.
 
 ```nginx
 server {
