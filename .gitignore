@@ -19,3 +19,7 @@ web/temp_uploads/*
 
 # Ignore the real demasking code backup
 web/views/demask.html.real
+
+# Local backups
+_backup_*/
+data/settings.json

@@ -92,15 +92,6 @@ Create `/etc/apache2/sites-available/social-hunt.conf`:
   ProxyPass / http://127.0.0.1:8000/
   ProxyPassReverse / http://127.0.0.1:8000/
 
-  # Optional: expose IOPaint WebUI at /iopaint (no TLS assumed)
-  <Location /iopaint>
-    LimitRequestBody 104857600
-    ProxyPass http://127.0.0.1:8080
-    ProxyPassReverse http://127.0.0.1:8080
-    RequestHeader set X-Forwarded-Proto "http"
-    RequestHeader set X-Forwarded-Host "%{Host}i"
-  </Location>
-
   # (Optional) access log
   ErrorLog ${APACHE_LOG_DIR}/social-hunt_error.log
   CustomLog ${APACHE_LOG_DIR}/social-hunt_access.log combined
@@ -122,6 +113,54 @@ If you have a domain pointed at the VPS:
 ```bash
 sudo apt -y install certbot python3-certbot-apache
 sudo certbot --apache -d osint.example.com
+```
+
+## 6b) Example: Social-Hunt at / + IOPaint at /iopaint
+
+If you want IOPaint under the same domain, the safest approach is to move the
+Social-Hunt API to `/sh-api` (so IOPaint can use `/api` and `/socket.io`).
+
+```apache
+<VirtualHost *:80>
+  ServerName osint.example.com
+  Redirect permanent / https://osint.example.com/
+</VirtualHost>
+
+<VirtualHost *:443>
+  ServerName osint.example.com
+  SSLEngine on
+  SSLCertificateFile /etc/ssl/your_cert/ssl.combined
+  SSLCertificateKeyFile /etc/ssl/your_cert/ssl.key
+
+  ProxyPreserveHost On
+  RequestHeader set X-Forwarded-Proto "https"
+  RequestHeader set X-Forwarded-Host "%{Host}i"
+
+  # IOPaint UI + assets + API + socket.io
+  ProxyPass        /iopaint/ http://127.0.0.1:8080/
+  ProxyPassReverse /iopaint/ http://127.0.0.1:8080/
+  ProxyPass        /assets/ http://127.0.0.1:8080/assets/
+  ProxyPassReverse /assets/ http://127.0.0.1:8080/assets/
+  ProxyPass        /api/ http://127.0.0.1:8080/api/
+  ProxyPassReverse /api/ http://127.0.0.1:8080/api/
+  ProxyPass        /socket.io/ http://127.0.0.1:8080/socket.io/
+  ProxyPassReverse /socket.io/ http://127.0.0.1:8080/socket.io/
+
+  # Social-Hunt API (moved to /sh-api)
+  ProxyPass        /sh-api/ http://127.0.0.1:8000/sh-api/
+  ProxyPassReverse /sh-api/ http://127.0.0.1:8000/sh-api/
+
+  # Social-Hunt app
+  ProxyPass        / http://127.0.0.1:8000/
+  ProxyPassReverse / http://127.0.0.1:8000/
+
+  # Allow PUT/POST/etc for /sh-api if ModSecurity blocks methods
+  <LocationMatch "^/sh-api/">
+    <IfModule mod_security2.c>
+      SecRuleRemoveById 911100
+    </IfModule>
+  </LocationMatch>
+</VirtualHost>
 ```
 
 ## 7) (Recommended) Put auth in front of it (so it can’t be abused)
