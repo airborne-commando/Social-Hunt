@@ -14,6 +14,16 @@ Social-Hunt is an OSINT framework for cross-platform username discovery, breach 
 - Demo mode that censors sensitive data for safe demonstrations.
 - Dashboard theme applies immediately on selection.
 
+## Tested Environments / VPS Compatibility
+
+Known-good environments for self-hosting:
+
+- Ubuntu 22.04 LTS (Jammy) on VPS providers (tested)
+
+Notes:
+- Other Debian/Ubuntu-based VPS images should work, but may require minor adjustments.
+- If you deploy on a different OS/distro, please report your results in an issue or PR.
+
 ## Architecture
 
 - Backend: FastAPI + httpx async scanning engine.
