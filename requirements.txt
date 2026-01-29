@@ -29,9 +29,9 @@ torchvision==0.16.2
 # You'll need to comment out these for specific gpu.
 
 # CPU
-# --extra-index-url https://download.pytorch.org/whl/cpu
-# torch==2.1.2
-# torchvision==0.16.2
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.1.2
+torchvision==0.16.2
 
 # Nvidia
 # --extra-index-url https://download.pytorch.org/whl/cu118
