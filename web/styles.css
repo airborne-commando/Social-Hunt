@@ -397,6 +397,33 @@ a:hover {
     border-radius: var(--radius2);
     color: var(--muted2);
     font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.footer-tip {
+    color: var(--muted);
+}
+
+.footer-links {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+}
+
+.footer-links a {
+    color: var(--text);
+    font-weight: 600;
+}
+
+.footer-sep {
+    color: var(--muted2);
+}
+
+.footer-credit {
+    color: var(--muted2);
 }
 
 .main {
