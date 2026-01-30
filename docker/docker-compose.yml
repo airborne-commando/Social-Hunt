@@ -2,9 +2,10 @@ version: "3.8"
 
 services:
   social-hunt:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: afterpacket/social-hunt:latest
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
     container_name: social-hunt
     ports:
       - "8000:8000"
@@ -89,6 +90,7 @@ services:
     command: >
       certonly --standalone --preferred-challenges http --http-01-port 80
       --email ${CERTBOT_EMAIL} --agree-tos --no-eff-email -d ${SSL_DOMAIN}
+
   # Optional: run IOPaint in a separate container (CPU-only)
   # Enable with: docker compose --profile iopaint up -d
   iopaint:
