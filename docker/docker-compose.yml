@@ -2,16 +2,19 @@ version: "3.8"
 
 services:
   social-hunt:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
+    image: afterpacket/social-hunt:latest
+    # build:
+    #   context: ..
+    #   dockerfile: docker/Dockerfile
     container_name: social-hunt
     ports:
       - "8000:8000"
     environment:
       # The admin token used to log into the dashboard and protect settings.
+      # This overrides the admin_token in data/settings.json
       # Change this to a secure random string.
-      - SOCIAL_HUNT_PLUGIN_TOKEN=your_secure_token_here
+      # Example: admin_token=MySecureToken123!
+      - admin_token=your_secure_token_here
 
       # Set to 1 to allow uploading new YAML or Python plugins via the Web UI.
       - SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1
@@ -89,6 +92,7 @@ services:
     command: >
       certonly --standalone --preferred-challenges http --http-01-port 80
       --email ${CERTBOT_EMAIL} --agree-tos --no-eff-email -d ${SSL_DOMAIN}
+
   # Optional: run IOPaint in a separate container (CPU-only)
   # Enable with: docker compose --profile iopaint up -d
   iopaint:
