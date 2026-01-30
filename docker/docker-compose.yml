@@ -12,6 +12,7 @@ services:
     environment:
       # The admin token used to log into the dashboard and protect settings.
       # Change this to a secure random string.
+      # Example: SOCIAL_HUNT_PLUGIN_TOKEN=MySecureToken123!
       - SOCIAL_HUNT_PLUGIN_TOKEN=your_secure_token_here
 
       # Set to 1 to allow uploading new YAML or Python plugins via the Web UI.
