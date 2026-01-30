@@ -11,9 +11,10 @@ services:
       - "8000:8000"
     environment:
       # The admin token used to log into the dashboard and protect settings.
+      # This overrides the admin_token in data/settings.json
       # Change this to a secure random string.
-      # Example: SOCIAL_HUNT_PLUGIN_TOKEN=MySecureToken123!
-      - SOCIAL_HUNT_PLUGIN_TOKEN=your_secure_token_here
+      # Example: admin_token=MySecureToken123!
+      - admin_token=your_secure_token_here
 
       # Set to 1 to allow uploading new YAML or Python plugins via the Web UI.
       - SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD=1
