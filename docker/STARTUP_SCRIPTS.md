@@ -4,18 +4,55 @@ This directory contains startup scripts to automatically launch Social-Hunt Dock
 
 ## Available Scripts
 
-- **`start-social-hunt.bat`** - Windows startup script
-- **`start-social-hunt.sh`** - Linux/macOS startup script
+### Universal Scripts (Recommended)
+
+- **`start.py`** - Universal Python script that auto-detects OS and starts Docker
+- **`start.bat`** - Windows wrapper for start.py (just double-click)
+- **`start.sh`** - Linux/macOS wrapper for start.py
+
+### OS-Specific Scripts
+
+- **`start-social-hunt.bat`** - Windows-only startup script
+- **`start-social-hunt.sh`** - Linux/macOS-only startup script
 
 ## Prerequisites
 
 1. Docker Desktop (Windows/macOS) or Docker Engine (Linux) must be installed
-2. Docker must be running before executing the startup scripts
+2. Python 3.6+ (for universal scripts) - optional, falls back to direct docker compose
 3. The `docker-compose.yml` file must be in the same directory as the scripts
+
+**Note**: The universal scripts can automatically detect your OS and even attempt to start Docker if it's not running!
 
 ## Quick Start
 
-### Windows
+### Universal Method (Recommended - Works on All OS)
+
+#### Option 1: Using Python Script Directly
+```bash
+python3 start.py
+# or
+python start.py
+```
+
+#### Option 2: Using OS Wrappers (Just Double-Click!)
+
+**Windows**: Double-click `start.bat`
+
+**Linux/macOS**: Double-click `start.sh` or run in terminal:
+```bash
+./start.sh
+```
+
+**Features of Universal Scripts:**
+- ✅ Auto-detects your operating system
+- ✅ Checks if Docker is running
+- ✅ Can attempt to start Docker automatically if not running
+- ✅ Waits for Docker to be ready
+- ✅ Provides clear status messages and helpful commands
+
+### OS-Specific Method (Alternative)
+
+#### Windows
 
 1. Double-click `start-social-hunt.bat`
 2. Or run from Command Prompt/PowerShell:
@@ -24,7 +61,7 @@ This directory contains startup scripts to automatically launch Social-Hunt Dock
    start-social-hunt.bat
    ```
 
-### Linux/macOS
+#### Linux/macOS
 
 1. Open Terminal and navigate to the docker directory:
    ```bash
