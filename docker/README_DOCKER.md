@@ -55,13 +55,41 @@ docker compose --profile certbot run --rm --service-ports certbot
 docker compose --profile ssl up -d
 ```
 
+
 ## Environment Variables
+
+
 
 The following environment variables can be configured in docker-compose.yml:
 
-- `SOCIAL_HUNT_PLUGIN_TOKEN`: Security token for dashboard access
+
+
+- `admin_token`: Security token for dashboard access (preferred method)
+
+- `SOCIAL_HUNT_PLUGIN_TOKEN`: Security token for dashboard access (alternative method)
 - `SOCIAL_HUNT_ENABLE_WEB_PLUGIN_UPLOAD`: Enable/disable plugin uploads via UI (1 or 0)
+
 - `SOCIAL_HUNT_ENABLE_TOKEN_BOOTSTRAP`: Allow setting token via UI if not configured (1 or 0)
+
+### Setting the Admin Token
+
+There are two ways to set the admin token:
+
+1. **Environment Variable (Recommended)**: Set the `admin_token` environment variable in docker-compose.yml:
+   ```yaml
+   environment:
+     - admin_token=YourSecureTokenHere
+   ```
+
+2. **Settings File**: Update the `data/settings.json` file with your token:
+   ```json
+   {
+     "admin_token": "YourSecureTokenHere"
+   }
+   ```
+
+The environment variable takes precedence over the settings file.
+
 
 ## Volume Mounts
 
