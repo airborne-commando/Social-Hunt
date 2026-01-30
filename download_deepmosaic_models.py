@@ -696,6 +696,8 @@ def main():
             print(f"\n⚠  Some files failed verification.")
             response = input("Continue anyway? (y/n): ")
             if response.lower() != 'y':
+                print("\nyou may need to download:")
+                print("\nhere: https://drive.google.com/open?id=1LTERcN33McoiztYEwBxMuRjjgxh4DEPs")
                 print("Exiting...")
                 return
     
@@ -795,7 +797,7 @@ def main():
             print(f"  clean_face_HD.pth is in mosaic directory ({size_mb:.1f} MB)")
     else:
         print("⚠  WARNING: Some .rar files failed to extract")
-        print("   You may need to extract them manually")
+        print("   You may need to extract them manually or download")
 
 if __name__ == "__main__":
     try:
@@ -811,3 +813,5 @@ if __name__ == "__main__":
         import traceback
         traceback.print_exc()
         print("\nPlease check your network connection and try again.")
+        print ("\nyou may need to download the models here:")
+        print("https://drive.google.com/open?id=1LTERcN33McoiztYEwBxMuRjjgxh4DEPs")
