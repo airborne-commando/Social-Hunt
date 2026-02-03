@@ -1,13 +1,17 @@
 # Use a slim Python 3.11 base image
 FROM python:3.11-slim
 
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     SOCIAL_HUNT_JOBS_DIR=/app/data/jobs \
     SOCIAL_HUNT_SETTINGS_PATH=/app/data/settings.json
 
+# Set work directory
 WORKDIR /app
 
+# Install system dependencies required for build and face recognition (dlib)
+# We need cmake, g++, and other build tools to compile dlib from source
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     cmake \
@@ -21,7 +25,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     unzip \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements-docker.txt . .
+# Copy requirements first to leverage Docker cache
+COPY requirements-docker.txt .
 
 # Install Python dependencies
 # Note: dlib and face_recognition can take a while to compile
