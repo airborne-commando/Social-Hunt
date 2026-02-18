@@ -9,7 +9,7 @@ numpy>=1.21.6,<2.0
 face_recognition
 dlib>=19.24.0  # Or latest binary
 cryptography>=42.0.0
-pillow>=10.4.0
+pillow>=9.5.0,<10.0.0
 ImageHash>=4.3.1
 python-multipart
 replicate
