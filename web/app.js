@@ -116,6 +116,7 @@ const viewTitles = {
   dashboard: "Dashboard",
   search: "Search",
   "breach-search": "Breach Search",
+  "google-dorks": "Google Dorks",
   reverse: "Reverse Image",
   history: "History",
   "secure-notes": "Secure Notes",
@@ -242,6 +243,7 @@ function initializeView(name) {
     dashboard: initDashboardView,
     search: initSearchView,
     "breach-search": initBreachSearchView,
+    "google-dorks": initGoogleDorksView,
     reverse: initReverseView,
     history: initHistoryView,
     plugins: initPluginsView,
@@ -905,6 +907,323 @@ function renderResults(job, containerId, opts = {}) {
       }
     };
   }
+}
+
+// ----------------------
+// Google Dorks
+// ----------------------
+function initGoogleDorksView() {
+  // Static dork template database. {target} is replaced at render time.
+  const DORK_TEMPLATES = [
+    // ── Site Info & Indexing ──────────────────────────────────────────
+    { category: "Site Info",    query: "site:{target}" },
+    { category: "Site Info",    query: "site:{target} -www" },
+    { category: "Site Info",    query: "related:{target}" },
+    { category: "Site Info",    query: "link:{target}" },
+    { category: "Site Info",    query: "info:{target}" },
+    { category: "Site Info",    query: "cache:{target}" },
+    { category: "Site Info",    query: "site:{target} inurl:sitemap" },
+    { category: "Site Info",    query: "site:{target} filetype:xml" },
+    { category: "Site Info",    query: "site:{target} inurl:robots.txt" },
+    { category: "Site Info",    query: '"intitle:index of" site:{target}' },
+
+    // ── Login / Admin Panels ──────────────────────────────────────────
+    { category: "Login Panels", query: "site:{target} inurl:login" },
+    { category: "Login Panels", query: "site:{target} inurl:admin" },
+    { category: "Login Panels", query: "site:{target} inurl:signin" },
+    { category: "Login Panels", query: "site:{target} inurl:dashboard" },
+    { category: "Login Panels", query: "site:{target} inurl:portal" },
+    { category: "Login Panels", query: "site:{target} inurl:wp-admin" },
+    { category: "Login Panels", query: "site:{target} inurl:wp-login" },
+    { category: "Login Panels", query: "site:{target} inurl:cpanel" },
+    { category: "Login Panels", query: "site:{target} inurl:phpmyadmin" },
+    { category: "Login Panels", query: "site:{target} inurl:auth" },
+    { category: "Login Panels", query: 'site:{target} intitle:"admin panel"' },
+    { category: "Login Panels", query: 'site:{target} intitle:"login" inurl:secure' },
+
+    // ── Sensitive Files ───────────────────────────────────────────────
+    { category: "Sensitive Files", query: "site:{target} filetype:pdf" },
+    { category: "Sensitive Files", query: "site:{target} filetype:xls OR filetype:xlsx" },
+    { category: "Sensitive Files", query: "site:{target} filetype:csv" },
+    { category: "Sensitive Files", query: "site:{target} filetype:sql" },
+    { category: "Sensitive Files", query: "site:{target} filetype:xml" },
+    { category: "Sensitive Files", query: "site:{target} filetype:json" },
+    { category: "Sensitive Files", query: "site:{target} filetype:log" },
+    { category: "Sensitive Files", query: "site:{target} filetype:bak" },
+    { category: "Sensitive Files", query: "site:{target} filetype:cfg OR filetype:conf OR filetype:config" },
+    { category: "Sensitive Files", query: "site:{target} filetype:env" },
+    { category: "Sensitive Files", query: 'site:{target} ext:txt "password"' },
+    { category: "Sensitive Files", query: "site:{target} ext:doc OR ext:docx confidential" },
+    { category: "Sensitive Files", query: "site:{target} filetype:pem OR filetype:key" },
+
+    // ── Open Directories ──────────────────────────────────────────────
+    { category: "Open Directories", query: 'site:{target} intitle:"index of"' },
+    { category: "Open Directories", query: 'site:{target} intitle:"index of /" "parent directory"' },
+    { category: "Open Directories", query: 'site:{target} intitle:"directory listing"' },
+    { category: "Open Directories", query: 'site:{target} inurl:/uploads/ intitle:"index of"' },
+    { category: "Open Directories", query: 'site:{target} inurl:/files/ intitle:"index of"' },
+    { category: "Open Directories", query: 'site:{target} inurl:/backup/ intitle:"index of"' },
+    { category: "Open Directories", query: 'site:{target} inurl:/temp/ intitle:"index of"' },
+    { category: "Open Directories", query: 'site:{target} inurl:/logs/ intitle:"index of"' },
+
+    // ── Subdomains ────────────────────────────────────────────────────
+    { category: "Subdomains", query: "site:*.{target}" },
+    { category: "Subdomains", query: "site:*.{target} -www" },
+    { category: "Subdomains", query: "site:dev.{target}" },
+    { category: "Subdomains", query: "site:staging.{target}" },
+    { category: "Subdomains", query: "site:test.{target}" },
+    { category: "Subdomains", query: "site:api.{target}" },
+    { category: "Subdomains", query: "site:mail.{target} OR site:email.{target}" },
+    { category: "Subdomains", query: "site:vpn.{target} OR site:remote.{target}" },
+    { category: "Subdomains", query: "site:beta.{target} OR site:alpha.{target}" },
+    { category: "Subdomains", query: "site:git.{target} OR site:gitlab.{target}" },
+    { category: "Subdomains", query: "site:jira.{target} OR site:confluence.{target}" },
+    { category: "Subdomains", query: "site:cdn.{target} OR site:static.{target}" },
+
+    // ── Email Harvesting ──────────────────────────────────────────────
+    { category: "Email Harvesting", query: '"{target}" "@gmail.com" OR "@yahoo.com" OR "@hotmail.com"' },
+    { category: "Email Harvesting", query: 'site:{target} intext:"@{target}"' },
+    { category: "Email Harvesting", query: '"{target}" "email" filetype:csv' },
+    { category: "Email Harvesting", query: '"{target}" "contact" "email"' },
+    { category: "Email Harvesting", query: "site:{target} inurl:contact" },
+    { category: "Email Harvesting", query: "site:{target} inurl:staff OR inurl:team OR inurl:people" },
+    { category: "Email Harvesting", query: "site:{target} inurl:about" },
+    { category: "Email Harvesting", query: '"{target}" filetype:pdf "email"' },
+    { category: "Email Harvesting", query: '"@{target}" site:linkedin.com' },
+    { category: "Email Harvesting", query: '"{target}" intext:"mailto:"' },
+
+    // ── Social Media Presence ─────────────────────────────────────────
+    { category: "Social Media", query: 'site:linkedin.com "{target}"' },
+    { category: "Social Media", query: 'site:twitter.com "{target}"' },
+    { category: "Social Media", query: 'site:facebook.com "{target}"' },
+    { category: "Social Media", query: 'site:instagram.com "{target}"' },
+    { category: "Social Media", query: 'site:reddit.com "{target}"' },
+    { category: "Social Media", query: 'site:github.com "{target}"' },
+    { category: "Social Media", query: 'site:youtube.com "{target}"' },
+    { category: "Social Media", query: 'site:tiktok.com "{target}"' },
+    { category: "Social Media", query: 'site:pinterest.com "{target}"' },
+    { category: "Social Media", query: 'site:pastebin.com "{target}"' },
+    { category: "Social Media", query: 'site:medium.com "{target}"' },
+    { category: "Social Media", query: 'site:tumblr.com "{target}"' },
+
+    // ── Cached / Historical Pages ─────────────────────────────────────
+    { category: "Cached / Historical", query: "cache:{target}" },
+    { category: "Cached / Historical", query: 'site:web.archive.org "{target}"' },
+    { category: "Cached / Historical", query: 'site:cachedview.nl "{target}"' },
+    { category: "Cached / Historical", query: 'site:archive.ph "{target}"' },
+    { category: "Cached / Historical", query: '"{target}" site:webcache.googleusercontent.com' },
+    { category: "Cached / Historical", query: 'site:timetravel.mementoweb.org "{target}"' },
+
+    // ── Camera / IoT Exposure ─────────────────────────────────────────
+    { category: "Camera / IoT", query: "site:{target} inurl:view/index.shtml" },
+    { category: "Camera / IoT", query: 'site:{target} intitle:"Live View / - AXIS"' },
+    { category: "Camera / IoT", query: 'site:{target} intitle:"webcamXP"' },
+    { category: "Camera / IoT", query: "site:{target} inurl:CgiStart?page=Single" },
+    { category: "Camera / IoT", query: 'site:{target} intitle:"Network Camera" inurl:ViewerFrame' },
+    { category: "Camera / IoT", query: "site:{target} inurl:axis-cgi/mjpg" },
+    { category: "Camera / IoT", query: 'site:{target} intitle:"RouterOS" inurl:winbox' },
+    { category: "Camera / IoT", query: 'site:{target} intitle:"SCADA"' },
+    { category: "Camera / IoT", query: 'site:{target} inurl:8080 OR inurl:8443 intitle:"camera"' },
+
+    // ── Vulnerability Indicators ──────────────────────────────────────
+    { category: "Vulnerability Indicators", query: 'site:{target} "SQL syntax" OR "mysql_fetch" OR "ORA-"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} "Warning: mysql_" OR "Warning: pg_"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} "Fatal error" "stack trace"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} intitle:"500 Internal Server Error"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} intext:"phpinfo()"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} intitle:"PHP Version"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} "Exception in thread" "java.lang"' },
+    { category: "Vulnerability Indicators", query: 'site:{target} intitle:"test page for apache"' },
+    { category: "Vulnerability Indicators", query: "site:{target} inurl:debug" },
+    { category: "Vulnerability Indicators", query: 'site:{target} "error" filetype:log' },
+    { category: "Vulnerability Indicators", query: "site:{target} inurl:?id= OR inurl:?page= OR inurl:?cat=" },
+
+    // ── Credentials / Secrets ─────────────────────────────────────────
+    { category: "Credentials / Secrets", query: 'site:{target} filetype:env "DB_PASSWORD"' },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"password" filetype:log' },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"password" filetype:txt' },
+    { category: "Credentials / Secrets", query: "site:{target} inurl:credentials" },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"api_key" OR intext:"api_secret"' },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"BEGIN RSA PRIVATE KEY"' },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"AWS_SECRET_ACCESS_KEY"' },
+    { category: "Credentials / Secrets", query: 'site:{target} inurl:.git intitle:"index of"' },
+    { category: "Credentials / Secrets", query: 'site:{target} filetype:json "client_secret"' },
+    { category: "Credentials / Secrets", query: 'site:{target} intext:"token" filetype:env' },
+    { category: "Credentials / Secrets", query: 'site:pastebin.com "{target}" password' },
+    { category: "Credentials / Secrets", query: 'site:github.com "{target}" password OR secret OR token' },
+  ];
+
+  const ALL_CATEGORIES = [...new Set(DORK_TEMPLATES.map((d) => d.category))];
+
+  // DOM refs
+  const targetEl   = document.getElementById("dorkTarget");
+  const categoryEl = document.getElementById("dorkCategory");
+  const generateBtn = document.getElementById("dorkGenerate");
+  const resultsEl  = document.getElementById("dorkResults");
+  const exportBar  = document.getElementById("dorkExportBar");
+  const copyAllBtn = document.getElementById("dorkCopyAll");
+  const downloadBtn = document.getElementById("dorkDownload");
+  const countEl    = document.getElementById("dorkCount");
+
+  if (!targetEl || !categoryEl || !generateBtn || !resultsEl) return;
+
+  // Populate category dropdown
+  categoryEl.innerHTML =
+    '<option value="all">All Categories</option>' +
+    ALL_CATEGORIES.map(
+      (c) => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`,
+    ).join("");
+
+  function buildDorks(target, categoryFilter) {
+    const t = target.trim();
+    let templates = DORK_TEMPLATES;
+    if (categoryFilter && categoryFilter !== "all") {
+      templates = templates.filter((d) => d.category === categoryFilter);
+    }
+    return templates.map((d) => ({
+      category: d.category,
+      query: d.query.replaceAll("{target}", t),
+    }));
+  }
+
+  function renderDorks(dorks) {
+    if (!dorks.length) {
+      resultsEl.innerHTML =
+        '<p class="muted" style="text-align:center;padding:20px;">No dorks generated. Enter a target above.</p>';
+      exportBar.style.display = "none";
+      countEl.textContent = "";
+      return;
+    }
+
+    // Group by category (preserving insertion order)
+    const groups = {};
+    dorks.forEach((d) => {
+      if (!groups[d.category]) groups[d.category] = [];
+      groups[d.category].push(d.query);
+    });
+
+    let html = "";
+    for (const [cat, queries] of Object.entries(groups)) {
+      html += `
+        <div class="dork-category-block">
+          <div class="dork-category-header">
+            <span class="dork-category-label">${escapeHtml(cat)}</span>
+            <span class="dork-category-count">${queries.length} dork${queries.length !== 1 ? "s" : ""}</span>
+          </div>
+          <div class="dork-table-wrap">
+            <table class="dork-table">
+              <thead>
+                <tr>
+                  <th>Query</th>
+                  <th style="width:140px;text-align:center;">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${queries
+                  .map(
+                    (q) => `
+                <tr>
+                  <td><code class="dork-code">${escapeHtml(q)}</code></td>
+                  <td class="dork-actions">
+                    <button class="btn btn-tiny dork-copy-btn" data-query="${escapeHtml(q)}" title="Copy to clipboard">Copy</button>
+                    <a class="btn btn-tiny btn-dork-search"
+                       href="https://www.google.com/search?q=${encodeURIComponent(q)}"
+                       target="_blank"
+                       rel="noopener noreferrer"
+                       title="Open in Google">Search</a>
+                  </td>
+                </tr>`,
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+    }
+
+    resultsEl.innerHTML = html;
+    countEl.textContent = `${dorks.length} dorks generated`;
+    exportBar.style.display = "flex";
+
+    // Bind per-row copy buttons
+    resultsEl.querySelectorAll(".dork-copy-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const q = btn.getAttribute("data-query");
+        navigator.clipboard
+          .writeText(q)
+          .then(() => {
+            const orig = btn.textContent;
+            btn.textContent = "Copied!";
+            setTimeout(() => {
+              btn.textContent = orig;
+            }, 1500);
+          })
+          .catch(() => {
+            showToast("Clipboard unavailable — copy manually.", 3000, "warning");
+          });
+      });
+    });
+  }
+
+  let lastDorks = [];
+
+  function generate() {
+    const target = (targetEl.value || "").trim();
+    if (!target) {
+      showToast("Enter a target first.", 2500, "warning");
+      targetEl.focus();
+      return;
+    }
+    lastDorks = buildDorks(target, categoryEl.value);
+    renderDorks(lastDorks);
+  }
+
+  generateBtn.addEventListener("click", generate);
+
+  targetEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") generate();
+  });
+
+  // Re-filter live when category changes (if results already exist)
+  categoryEl.addEventListener("change", () => {
+    if (lastDorks.length > 0) generate();
+  });
+
+  // Copy all to clipboard
+  copyAllBtn.addEventListener("click", () => {
+    if (!lastDorks.length) return;
+    const text = lastDorks.map((d) => d.query).join("\n");
+    navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        showToast("All dorks copied to clipboard.", 2500, "info");
+      })
+      .catch(() => {
+        showToast("Clipboard unavailable.", 3000, "warning");
+      });
+  });
+
+  // Download as .txt
+  downloadBtn.addEventListener("click", () => {
+    if (!lastDorks.length) return;
+    const target = (targetEl.value || "target")
+      .trim()
+      .replace(/[^a-z0-9._-]/gi, "_");
+    const lines = lastDorks
+      .map((d) => `# ${d.category}\n${d.query}`)
+      .join("\n\n");
+    const blob = new Blob([lines], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `google-dorks-${target}-${Date.now()}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    }, 1000);
+  });
 }
 
 // ----------------------

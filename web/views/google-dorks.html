@@ -1,0 +1,199 @@
+<h2>Google Dorks</h2>
+<p class="muted">
+    Generate ready-to-use Google search operator queries for any target
+    — domain, name, username, email, or company. Click <strong>Search</strong>
+    to open a query directly in Google, or export the full list.
+</p>
+
+<!-- Input Card -->
+<div class="card" style="margin-bottom: 16px;">
+    <div class="row" style="flex-wrap: wrap; gap: 12px; align-items: flex-end;">
+        <div style="flex: 1; min-width: 200px;">
+            <label style="display:block; margin-bottom: 6px; font-weight: 600;">
+                Target
+            </label>
+            <input
+                id="dorkTarget"
+                placeholder="e.g. example.com  or  John Doe  or  john_doe"
+                autocomplete="off"
+                spellcheck="false"
+            />
+            <div class="hint" style="margin-top: 6px;">
+                For site-based dorks use a bare domain (<code>example.com</code>).
+                For person / username searches enter a name or handle.
+            </div>
+        </div>
+
+        <div style="min-width: 190px;">
+            <label style="display:block; margin-bottom: 6px; font-weight: 600;">
+                Category filter
+            </label>
+            <select id="dorkCategory" style="width: 100%;"></select>
+        </div>
+
+        <div>
+            <button class="btn good" id="dorkGenerate" type="button">
+                Generate Dorks
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Export bar (hidden until dorks generated) -->
+<div id="dorkExportBar" class="dork-export-bar" style="display: none; margin-bottom: 16px;">
+    <span id="dorkCount" class="muted" style="font-size: 13px;"></span>
+    <div class="row" style="gap: 8px;">
+        <button class="btn" id="dorkCopyAll" type="button">Copy All</button>
+        <button class="btn" id="dorkDownload" type="button">Download .txt</button>
+    </div>
+</div>
+
+<!-- Results injected by JS -->
+<div id="dorkResults"></div>
+
+<style>
+    /* ── Export bar ──────────────────────────────────────────────── */
+    .dork-export-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 10px;
+        padding: 12px 16px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+    }
+
+    /* ── Category blocks ─────────────────────────────────────────── */
+    .dork-category-block {
+        margin-bottom: 20px;
+    }
+
+    .dork-category-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 8px 14px;
+        background: rgba(var(--accent-rgb), 0.07);
+        border: 1px solid rgba(var(--accent-rgb), 0.18);
+        border-radius: var(--radius) var(--radius) 0 0;
+    }
+
+    .dork-category-label {
+        font-weight: 700;
+        font-size: 13px;
+        color: var(--accent);
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+    }
+
+    .dork-category-count {
+        font-size: 11px;
+        color: var(--muted2, var(--muted));
+    }
+
+    /* ── Dork table ──────────────────────────────────────────────── */
+    .dork-table-wrap {
+        border: 1px solid var(--border);
+        border-top: none;
+        border-radius: 0 0 var(--radius) var(--radius);
+        overflow-x: auto;
+    }
+
+    .dork-table {
+        width: 100%;
+        border-collapse: collapse;
+        border: none;
+        background: transparent;
+    }
+
+    .dork-table th {
+        background: rgba(255, 255, 255, 0.02);
+        padding: 10px 14px;
+        font-size: 11px;
+        color: var(--muted);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        font-weight: 600;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+    }
+
+    .dork-table td {
+        padding: 9px 14px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+    }
+
+    .dork-table tr:last-child td {
+        border-bottom: none;
+    }
+
+    .dork-table tbody tr:hover {
+        background: rgba(var(--accent-rgb), 0.04);
+    }
+
+    /* ── Dork code display ───────────────────────────────────────── */
+    .dork-code {
+        display: inline-block;
+        font-family:
+            ui-monospace, SFMono-Regular, SF Mono, Monaco, Cascadia Code,
+            Roboto Mono, Menlo, Consolas, "Courier New", monospace;
+        font-size: 13px;
+        background: rgba(var(--accent-rgb), 0.08);
+        color: var(--accent);
+        padding: 3px 8px;
+        border-radius: 5px;
+        word-break: break-all;
+        user-select: all;
+    }
+
+    /* ── Action cell ─────────────────────────────────────────────── */
+    .dork-actions {
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    /* ── Tiny buttons ────────────────────────────────────────────── */
+    .btn-tiny {
+        padding: 5px 10px;
+        font-size: 12px;
+        border-radius: 8px;
+        margin: 0 2px;
+    }
+
+    .btn-dork-search {
+        color: var(--accent);
+        border-color: rgba(var(--accent-rgb), 0.3);
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-dork-search:hover {
+        background: rgba(var(--accent-rgb), 0.12);
+        border-color: rgba(var(--accent-rgb), 0.5);
+    }
+
+    /* ── Responsive ──────────────────────────────────────────────── */
+    @media (max-width: 650px) {
+        .dork-export-bar {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .dork-table td,
+        .dork-table th {
+            padding: 8px 10px;
+        }
+
+        .dork-code {
+            font-size: 11px;
+        }
+
+        .dork-actions {
+            white-space: normal;
+        }
+    }
+</style>
