@@ -2,12 +2,14 @@
 <div class="card">
     <p class="muted" style="margin-bottom: 20px">
         This tool uses a multi-stage AI pipeline to reconstruct facial features.
-        First, a face detector auto-generates a mask over the covered region and
-        <b>Stable Diffusion Inpainting</b> fills <em>only that region</em> —
-        leaving hair, skin tone, eyebrows and all surrounding identity cues
-        untouched, which prevents gender swaps and full-image hallucinations.
-        Second, <b>CodeFormer</b> is applied at balanced fidelity to sharpen the
-        inpainted area without replacing the generated face.
+        First, visible skin tone, gender cues, and facial hair are sampled from
+        the exposed face area. The gaiter/balaclava region is then pre-filled
+        with the subject's skin colour so the AI sees flesh-coloured pixels
+        rather than a mask — preventing it from generating a replacement
+        covering.
+        <b>Realistic Vision inpainting</b> then fills
+        <em>only the covered region</em>, leaving hair, cap, clothing and
+        background pixel-perfect.
     </p>
     <p
         class="muted warning"

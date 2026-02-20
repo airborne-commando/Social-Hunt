@@ -947,6 +947,135 @@ async def api_plugin_delete(
     return {"ok": True, "deleted": name}
 
 
+def _detect_gender_hint(
+    image_bytes: bytes,
+    face_boxes: list,
+) -> str:
+    """
+    Analyse the eyebrow strip (25–40 % of face height) to infer gender.
+    Male eyebrows are typically darker, thicker, and have a higher dark-pixel
+    density relative to the surrounding skin.  Female eyebrows tend to be
+    thinner with a higher arch and a lower density.
+
+    Returns: "man", "woman", or "unknown"
+    """
+    from PIL import Image as PILImage
+
+    def _lum(r, g, b):
+        return r * 0.299 + g * 0.587 + b * 0.114
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+
+        fore_lums: list[float] = []
+        brow_dark_ratios: list[float] = []
+
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+            if fh < 40 or fw < 40:
+                continue
+
+            # Skin baseline: top 20 % of face box
+            ft, fb = top, top + max(1, int(fh * 0.20))
+            fl, fr = left + int(fw * 0.25), right - int(fw * 0.25)
+            if fb > ft and fr > fl:
+                crop = pil.crop((fl, ft, fr, fb))
+                fore_lums.extend(_lum(*p) for p in crop.getdata())
+
+            # Eyebrow strip: 25–40 % of face height
+            et = top + int(fh * 0.25)
+            eb = top + int(fh * 0.40)
+            el = left + int(fw * 0.10)
+            er = right - int(fw * 0.10)
+            if eb > et and er > el and fore_lums:
+                avg_fore = sum(fore_lums) / len(fore_lums)
+                brow_crop = pil.crop((el, et, er, eb))
+                pixels = list(brow_crop.getdata())
+                if pixels:
+                    # Ratio of pixels darker than 55 % of forehead luminance
+                    threshold = avg_fore * 0.55
+                    dark_ratio = sum(1 for p in pixels if _lum(*p) < threshold) / len(
+                        pixels
+                    )
+                    brow_dark_ratios.append(dark_ratio)
+
+        if not brow_dark_ratios:
+            return "unknown"
+
+        avg_ratio = sum(brow_dark_ratios) / len(brow_dark_ratios)
+        print(f"[Demask] Gender hint: eyebrow dark-pixel ratio={avg_ratio:.3f}")
+
+        # Empirically: male brow ratio tends to be > 0.20, female < 0.14
+        if avg_ratio > 0.20:
+            return "man"
+        elif avg_ratio < 0.13:
+            return "woman"
+        else:
+            return "unknown"
+
+    except Exception as e:
+        print(f"[Demask] Gender detection failed ({e}); using unknown.")
+        return "unknown"
+
+
+def _prefill_mask_with_skin(
+    image_bytes: bytes,
+    mask_bytes: bytes,
+    face_boxes: list,
+) -> bytes:
+    """
+    Before handing the image to SD inpainting, fill the masked (gaiter/balaclava)
+    region with the subject's approximate skin colour sampled from the forehead.
+
+    Why: SD inpainting sees the white gaiter and associates it with a face
+    covering, so it generates a replacement mask (surgical mask etc.) instead
+    of facial features.  By painting the covered region with skin colour first,
+    the model is presented with a flesh-coloured blank and generates actual
+    face anatomy rather than another mask.
+    """
+    from PIL import Image as PILImage
+
+    try:
+        original = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        mask_pil = PILImage.open(BytesIO(mask_bytes)).convert("L")
+        w, h = original.size
+
+        # Sample forehead for skin colour
+        skin_r, skin_g, skin_b = 200, 170, 150  # neutral fallback
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+            ft = top
+            fb = top + max(1, int(fh * 0.20))
+            fl = left + int(fw * 0.25)
+            fr = right - int(fw * 0.25)
+            if fb > ft and fr > fl:
+                crop = original.crop((fl, ft, fr, fb))
+                pixels = list(crop.getdata())
+                if pixels:
+                    skin_r = sum(p[0] for p in pixels) // len(pixels)
+                    skin_g = sum(p[1] for p in pixels) // len(pixels)
+                    skin_b = sum(p[2] for p in pixels) // len(pixels)
+                break
+
+        # Fill mask region with skin colour
+        skin_fill = PILImage.new("RGB", (w, h), (skin_r, skin_g, skin_b))
+        prefilled = PILImage.composite(skin_fill, original, mask_pil)
+
+        buf = BytesIO()
+        prefilled.save(buf, format="PNG")
+        print(
+            f"[Demask] Pre-filled mask region with skin colour "
+            f"rgb({skin_r},{skin_g},{skin_b})."
+        )
+        return buf.getvalue()
+
+    except Exception as e:
+        print(f"[Demask] Skin pre-fill failed ({e}); using original image.")
+        return image_bytes
+
+
 def _sample_skin_tone(
     image_bytes: bytes,
     face_boxes: list,
@@ -1379,9 +1508,19 @@ async def api_demask(
         )
         print("[Demask] Mask generated.")
 
-        # ── 4. Sample visible skin tone to anchor the prompt ──────────────────
+        # ── 4. Sample visible skin tone, detect gender and facial hair ────────
         skin_tone_hint = await asyncio.to_thread(_sample_skin_tone, content, face_boxes)
         print(f"[Demask] Skin tone sampled: {skin_tone_hint}")
+
+        gender_hint = await asyncio.to_thread(_detect_gender_hint, content, face_boxes)
+        print(f"[Demask] Gender hint: {gender_hint}")
+
+        # ── 4b. Pre-fill gaiter region with skin colour ────────────────────────
+        # This prevents SD from "replacing mask with mask" — the model sees
+        # flesh-coloured pixels and generates facial features instead.
+        prefilled_content = await asyncio.to_thread(
+            _prefill_mask_with_skin, content, mask_bytes, face_boxes
+        )
 
         # ── 5. Crop face region for focused, low-upscale inpainting ──────────
         # Sending just the face crop to SD (resized to 512×512) and pasting the
@@ -1395,7 +1534,7 @@ async def api_demask(
             orig_size,
             crop_size,
         ) = await asyncio.to_thread(
-            _crop_for_inpainting, content, mask_bytes, face_boxes
+            _crop_for_inpainting, prefilled_content, mask_bytes, face_boxes
         )
 
         # ── 6. Resolve inpainting models ──────────────────────────────────────
@@ -1460,22 +1599,36 @@ async def api_demask(
             hair_negative = ""
             print("[Demask] Prompt: neutral on facial hair.")
 
-        NEGATIVE = NEGATIVE_BASE + (" " + hair_negative if hair_negative else "")
+        # NEGATIVE is finalised after gender detection below
 
         # ── 7. Inpainting on the face crop ────────────────────────────────────
         # guidance_scale 5.0: low enough to stay photographic, high enough to
         # actually follow "no mask". Lower = more natural skin, less "stylized".
         inpainted_url = ""
 
+        gender_positive = f"{gender_hint}, " if gender_hint != "unknown" else ""
+        gender_negative = (
+            "woman, female, girl, "
+            if gender_hint == "man"
+            else "man, male, boy, "
+            if gender_hint == "woman"
+            else ""
+        )
+
+        NEGATIVE = NEGATIVE_BASE + (
+            (" " + hair_negative if hair_negative else "")
+            + (" " + gender_negative if gender_negative else "")
+        )
+
         INPAINT_INPUT = {
             "image": crop_b64_img,
             "mask": crop_b64_mask,
             "prompt": (
-                f"photo-realistic human face, {skin_tone_hint}, "
+                f"photo-realistic {gender_positive}human face, {skin_tone_hint}, "
                 f"{hair_positive} "
                 "natural skin texture, photographic, RAW photo, DSLR, "
-                "same person, same gender, same ethnicity, "
-                "no face covering, no mask"
+                "same ethnicity, no face covering, no mask, no surgical mask, "
+                "open face, revealed face"
             ),
             "negative_prompt": NEGATIVE,
             "num_outputs": 1,
