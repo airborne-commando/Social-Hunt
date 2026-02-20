@@ -4,22 +4,78 @@
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Login - Social Hunt</title>
-        <link rel="stylesheet" href="/static/styles.css?v=2.2.1" />
+        <meta
+            http-equiv="Cache-Control"
+            content="no-cache, no-store, must-revalidate"
+        />
+        <meta http-equiv="Pragma" content="no-cache" />
+        <meta http-equiv="Expires" content="0" />
+        <link rel="stylesheet" href="/static/styles.css?v=2.2.2" />
         <style>
+            /* Enhanced theme consistency for login page */
+            :root {
+                /* Force CSS variables refresh */
+                --theme-transition: none;
+            }
+
             body {
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 padding: 1rem;
+                /* Ensure background uses theme variable */
+                background: var(--bg) !important;
+                color: var(--text) !important;
+                /* Prevent theme transition flicker */
+                transition:
+                    background-color 0s,
+                    color 0s !important;
             }
+
             .login-wrapper {
                 width: 100%;
                 max-width: 360px;
             }
+
             .brand {
                 text-align: center;
                 margin-bottom: 1.5rem;
                 padding: 1.5rem 1rem;
+            }
+
+            /* Ensure card uses theme variables */
+            .card {
+                background: var(--panel) !important;
+                border-color: var(--border) !important;
+                color: var(--text) !important;
+            }
+
+            /* Force theme variable recalculation */
+            * {
+                /* Trigger repaint for theme consistency */
+                transform: translateZ(0);
+            }
+
+            /* Theme-specific overrides for login consistency */
+            .brand-title {
+                color: var(--accent, var(--text)) !important;
+            }
+
+            .brand-sub {
+                color: var(--muted) !important;
+            }
+
+            /* Input styling consistency */
+            input[type="password"] {
+                background: var(--panel2, var(--panel)) !important;
+                border-color: var(--border) !important;
+                color: var(--text) !important;
+            }
+
+            input[type="password"]:focus {
+                border-color: var(--accent) !important;
+                box-shadow: 0 0 0 2px
+                    rgba(var(--accent-rgb, 140, 200, 255), 0.2) !important;
             }
         </style>
     </head>
@@ -60,37 +116,146 @@
         </div>
 
         <script>
-            // Ensure clean theme state on login page
-            function loadTheme() {
-                // Clear any existing theme attributes
+            // Ultra-robust theme loading with multiple fallbacks
+            function loadTheme(retryCount = 0) {
+                const maxRetries = 3;
+                const retryDelay = [50, 150, 300][retryCount] || 500;
+
+                // Clear any existing theme state completely
                 document.body.removeAttribute("data-theme");
                 document.body.className = document.body.className
                     .split(" ")
                     .filter((cls) => !cls.startsWith("theme-"))
                     .join(" ");
 
-                // Apply server theme
-                fetch("/sh-api/public/theme")
-                    .then((res) => res.json())
-                    .then((j) => {
-                        if (j.theme && j.theme !== "default") {
-                            document.body.setAttribute("data-theme", j.theme);
+                // Multiple theme loading strategies
+                const loadStrategies = [
+                    () => fetch("/sh-api/public/theme?" + Date.now()),
+                    () => fetch("/sh-api/public/theme"),
+                    () => Promise.resolve({ ok: false }), // Fallback to trigger default
+                ];
+
+                function attemptThemeLoad(strategyIndex = 0) {
+                    if (strategyIndex >= loadStrategies.length) {
+                        // All strategies failed, apply default theme
+                        applyTheme(null, true);
+                        return;
+                    }
+
+                    setTimeout(() => {
+                        loadStrategies[strategyIndex]()
+                            .then((res) => {
+                                if (!res.ok)
+                                    throw new Error(`HTTP ${res.status}`);
+                                return res.json();
+                            })
+                            .then((data) => {
+                                applyTheme(data.theme);
+                            })
+                            .catch((error) => {
+                                console.warn(
+                                    `Theme strategy ${strategyIndex + 1} failed:`,
+                                    error,
+                                );
+                                attemptThemeLoad(strategyIndex + 1);
+                            });
+                    }, retryDelay);
+                }
+
+                function applyTheme(theme, isFailsafe = false) {
+                    try {
+                        if (theme && theme !== "default") {
+                            document.body.setAttribute("data-theme", theme);
+                            console.log(`Login theme applied: ${theme}`);
+                        } else {
+                            document.body.removeAttribute("data-theme");
+                            console.log(
+                                `Login default theme applied${isFailsafe ? " (failsafe)" : ""}`,
+                            );
                         }
-                        // Force style refresh
-                        document.body.offsetHeight;
-                    })
-                    .catch((error) => {
-                        console.warn(
-                            "Theme loading failed, using default:",
-                            error,
-                        );
-                        // Ensure default theme is properly applied
-                        document.body.removeAttribute("data-theme");
-                    });
+
+                        // Enhanced style refresh with multiple techniques
+                        requestAnimationFrame(() => {
+                            // Force reflow and repaint
+                            document.body.offsetHeight;
+                            document.body.style.opacity = "0.99";
+                            document.body.offsetHeight;
+                            document.body.style.opacity = "";
+
+                            // Force CSS variable recalculation
+                            const testDiv = document.createElement("div");
+                            testDiv.style.cssText =
+                                "position:absolute;visibility:hidden;color:var(--text);background:var(--bg);";
+                            document.body.appendChild(testDiv);
+                            const computedStyle =
+                                window.getComputedStyle(testDiv);
+                            computedStyle.color;
+                            computedStyle.backgroundColor;
+                            document.body.removeChild(testDiv);
+
+                            // Verify theme application
+                            setTimeout(() => {
+                                const bgColor = window.getComputedStyle(
+                                    document.body,
+                                ).backgroundColor;
+                                if (
+                                    bgColor === "rgba(0, 0, 0, 0)" ||
+                                    bgColor === "transparent"
+                                ) {
+                                    if (retryCount < maxRetries) {
+                                        console.warn(
+                                            `Theme verification failed, retry ${retryCount + 1}/${maxRetries}`,
+                                        );
+                                        loadTheme(retryCount + 1);
+                                    }
+                                }
+                            }, 100);
+                        });
+                    } catch (error) {
+                        console.error("Theme application error:", error);
+                        if (retryCount < maxRetries) {
+                            setTimeout(() => loadTheme(retryCount + 1), 200);
+                        }
+                    }
+                }
+
+                attemptThemeLoad();
             }
 
-            // Load theme immediately
-            loadTheme();
+            // Multiple theme loading triggers for maximum reliability
+            let themeLoaded = false;
+
+            function safeLoadTheme() {
+                if (themeLoaded) return;
+                themeLoaded = true;
+                loadTheme();
+            }
+
+            // Immediate load if DOM is ready
+            if (document.readyState === "loading") {
+                document.addEventListener("DOMContentLoaded", safeLoadTheme);
+            } else {
+                safeLoadTheme();
+            }
+
+            // Backup load after window load
+            window.addEventListener("load", () => {
+                setTimeout(() => {
+                    if (!themeLoaded) {
+                        themeLoaded = true;
+                        loadTheme();
+                    }
+                }, 50);
+            });
+
+            // Final fallback after extended delay
+            setTimeout(() => {
+                if (!themeLoaded) {
+                    console.warn("Theme loading timeout, applying fallback");
+                    themeLoaded = true;
+                    loadTheme();
+                }
+            }, 2000);
 
             const KEY = "socialhunt_token";
 
