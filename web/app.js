@@ -168,19 +168,35 @@ async function loadView(name) {
     // Update title immediately
     viewTitle.textContent = viewTitles[name] || name;
 
-    // Fetch content with shorter timeout
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 5000); // 5s timeout
+    // Fetch the view HTML, retrying once on timeout (server may be busy during a scan)
+    async function fetchView() {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s timeout
+      try {
+        const res = await fetch(`/static/views/${name}.html?v=${getCacheBust()}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        clearTimeout(timeoutId);
+        if (!res.ok) throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+        return res;
+      } catch (e) {
+        clearTimeout(timeoutId);
+        throw e;
+      }
+    }
 
-    const res = await fetch(`/static/views/${name}.html?v=${getCacheBust()}`, {
-      cache: "no-store",
-      signal: controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    if (!res.ok) {
-      throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+    let res;
+    try {
+      res = await fetchView();
+    } catch (firstErr) {
+      if (firstErr.name === "AbortError") {
+        // Server was busy — wait briefly and try once more before giving up
+        await new Promise((r) => setTimeout(r, 2000));
+        res = await fetchView();
+      } else {
+        throw firstErr;
+      }
     }
 
     const content = await res.text();
