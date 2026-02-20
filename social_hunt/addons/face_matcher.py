@@ -4,11 +4,23 @@ import io
 import logging
 from typing import List, Optional, Tuple
 
-import face_recognition
+try:
+    import face_recognition
+    _FACE_RECOGNITION_AVAILABLE = True
+except Exception:
+    face_recognition = None  # type: ignore[assignment]
+    _FACE_RECOGNITION_AVAILABLE = False
 import httpx
-import imagehash
-from PIL import Image
-from PIL import UnidentifiedImageError as PILUnidentifiedImageError
+try:
+    import imagehash
+    from PIL import Image
+    from PIL import UnidentifiedImageError as PILUnidentifiedImageError
+    _IMAGING_AVAILABLE = True
+except Exception:
+    imagehash = None  # type: ignore[assignment]
+    Image = None  # type: ignore[assignment]
+    PILUnidentifiedImageError = Exception  # type: ignore[assignment]
+    _IMAGING_AVAILABLE = False
 
 from ..addons_base import BaseAddon
 from ..rate_limit import HostRateLimiter

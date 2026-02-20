@@ -17,7 +17,11 @@ def load_plugin_addons() -> Dict[str, BaseAddon]:
     pkg = importlib.import_module("social_hunt.addons")
 
     for m in pkgutil.iter_modules(pkg.__path__, pkg.__name__ + "."):
-        mod = importlib.import_module(m.name)
+        try:
+            mod = importlib.import_module(m.name)
+        except Exception as e:
+            print(f"[WARN] Skipping addon module {m.name!r}: {e}")
+            continue
 
         if hasattr(mod, "get_addons"):
             for a in mod.get_addons():
