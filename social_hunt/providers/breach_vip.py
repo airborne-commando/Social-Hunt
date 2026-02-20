@@ -4,6 +4,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+import httpx
+
 from ..demo import censor_breach_data, is_demo_mode
 from ..providers_base import BaseProvider
 from ..types import ProviderResult, ResultStatus
@@ -20,7 +22,10 @@ class BreachVIPProvider(BaseProvider):
     Rate limit: 15 requests per minute
     Maximum results: 10,000 per search
 
-    Note: No API key required based on the OpenAPI documentation.
+    No API key or settings required.
+    Requests are always made directly (no proxy, trust_env=False) so that
+    system-level HTTP_PROXY / HTTPS_PROXY env vars and the optional Tor
+    SOCKS proxy (SOCIAL_HUNT_PROXY) are never applied to breach.vip calls.
     """
 
     name = "breachvip"
@@ -79,24 +84,23 @@ class BreachVIPProvider(BaseProvider):
             "case_sensitive": False,
         }
 
-        # Logging for debugging wildcard and search issues
-        print(
-            f"[DEBUG] BreachVIP search: term='{search_term}', fields={fields_to_search}, wildcard={is_wildcard}"
-        )
-
         profile: Dict[str, Any] = {
             "account": search_term,
             "fields_searched": fields_to_search,
         }
         evidence: Dict[str, Any] = {"breachvip": True}
 
+        # Always use a dedicated direct client — trust_env=False ensures that
+        # HTTP_PROXY / HTTPS_PROXY env vars and any SOCKS proxy configured via
+        # SOCIAL_HUNT_PROXY are never applied to breach.vip requests.
         try:
-            response = await client.post(
-                self.build_url(username),
-                timeout=self.timeout,
-                headers=breachvip_headers,
-                json=request_body,
-            )
+            async with httpx.AsyncClient(trust_env=False) as direct_client:
+                response = await direct_client.post(
+                    self.build_url(username),
+                    timeout=self.timeout,
+                    headers=breachvip_headers,
+                    json=request_body,
+                )
 
             elapsed = int((time.monotonic() - start) * 1000)
 
