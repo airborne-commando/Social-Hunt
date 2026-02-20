@@ -166,6 +166,27 @@ async function loadView(name) {
       );
     }
 
+    // Handle search submenu
+    const searchSubmenu = document.getElementById("searchSubmenu");
+    const searchToggle = document.querySelector(
+      '.menu-toggle-btn[data-menu-toggle="search"]',
+    );
+    const searchBtn = document.querySelector('.menu-btn[data-view="search"]');
+    const isSearchGroup = name === "search" || name === "google-dorks";
+
+    if (searchSubmenu && searchToggle) {
+      searchSubmenu.classList.toggle("is-open", isSearchGroup);
+      searchToggle.setAttribute(
+        "aria-expanded",
+        isSearchGroup ? "true" : "false",
+      );
+    }
+
+    if (searchBtn) {
+      searchBtn.classList.toggle("active", name === "search");
+      searchBtn.classList.toggle("active-parent", name === "google-dorks");
+    }
+
     // Update title immediately
     viewTitle.textContent = viewTitles[name] || name;
 
@@ -3729,9 +3750,9 @@ document
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       const target = btn.getAttribute("data-menu-toggle");
-      if (target !== "demask") return;
 
-      const submenu = document.getElementById("demaskSubmenu");
+      // Derive submenu id: e.g. "demask" -> "demaskSubmenu", "search" -> "searchSubmenu"
+      const submenu = document.getElementById(target + "Submenu");
       if (!submenu) return;
 
       const isOpen = submenu.classList.contains("is-open");
