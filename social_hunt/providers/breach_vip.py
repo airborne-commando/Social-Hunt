@@ -6,6 +6,8 @@ import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
+import httpx
+
 from ..demo import censor_breach_data, is_demo_mode
 from ..providers_base import BaseProvider
 from ..types import ProviderResult, ResultStatus
@@ -32,17 +34,10 @@ class BreachVIPProvider(BaseProvider):
     Rate limit: 15 requests per minute
     Maximum results: 10,000 per search
 
-    Proxy Settings (configurable via UI or environment variables):
-      - breachvip.proxy_enabled: Enable/disable proxy usage
-      - breachvip.proxy_url: Proxy URL (e.g., "http://proxy:8080")
-      - breachvip.proxy_auth: Proxy authentication (e.g., "user:pass")
-      - breachvip.proxy_strategy: Connection strategy ("regular_first", "proxy_first", "proxy_only")
-      - breachvip.use_residential_ip: Use residential IP when available
-
-    Environment fallbacks:
-      - BREACHVIP_PROXY_URL, BREACHVIP_PROXY_AUTH, BREACHVIP_USE_RESIDENTIAL_IP
-
-    Note: No API key required based on the OpenAPI documentation.
+    No API key or settings required.
+    Requests are always made directly (no proxy, trust_env=False) so that
+    system-level HTTP_PROXY / HTTPS_PROXY env vars and the optional Tor
+    SOCKS proxy (SOCIAL_HUNT_PROXY) are never applied to breach.vip calls.
     """
 
     name = "breachvip"
@@ -300,18 +295,23 @@ class BreachVIPProvider(BaseProvider):
             "case_sensitive": False,
         }
 
-        print(
-            f"[DEBUG] BreachVIP search: term='{search_term}', fields={fields_to_search}, wildcard={is_wildcard}"
-        )
-
         profile: Dict[str, Any] = {
             "account": search_term,
             "fields_searched": fields_to_search,
         }
         evidence: Dict[str, Any] = {"breachvip": True}
 
-        # Get connection strategies
-        connection_strategies = self._get_connection_strategies()
+        # Always use a dedicated direct client — trust_env=False ensures that
+        # HTTP_PROXY / HTTPS_PROXY env vars and any SOCKS proxy configured via
+        # SOCIAL_HUNT_PROXY are never applied to breach.vip requests.
+        try:
+            async with httpx.AsyncClient(trust_env=False) as direct_client:
+                response = await direct_client.post(
+                    self.build_url(username),
+                    timeout=self.timeout,
+                    headers=breachvip_headers,
+                    json=request_body,
+                )
 
         # Retry logic with connection strategy failover
         max_retries = 3

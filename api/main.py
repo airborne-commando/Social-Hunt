@@ -947,18 +947,621 @@ async def api_plugin_delete(
     return {"ok": True, "deleted": name}
 
 
+def _detect_gender_hint(
+    image_bytes: bytes,
+    face_boxes: list,
+) -> str:
+    """
+    Analyse the eyebrow strip (25–40 % of face height) to infer gender.
+    Male eyebrows are typically darker, thicker, and have a higher dark-pixel
+    density relative to the surrounding skin.  Female eyebrows tend to be
+    thinner with a higher arch and a lower density.
+
+    Returns: "man", "woman", or "unknown"
+    """
+    from PIL import Image as PILImage
+
+    def _lum(r, g, b):
+        return r * 0.299 + g * 0.587 + b * 0.114
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+
+        fore_lums: list[float] = []
+        brow_dark_ratios: list[float] = []
+
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+            if fh < 40 or fw < 40:
+                continue
+
+            # Skin baseline: top 20 % of face box
+            ft, fb = top, top + max(1, int(fh * 0.20))
+            fl, fr = left + int(fw * 0.25), right - int(fw * 0.25)
+            if fb > ft and fr > fl:
+                crop = pil.crop((fl, ft, fr, fb))
+                fore_lums.extend(_lum(*p) for p in crop.getdata())
+
+            # Eyebrow strip: 25–40 % of face height
+            et = top + int(fh * 0.25)
+            eb = top + int(fh * 0.40)
+            el = left + int(fw * 0.10)
+            er = right - int(fw * 0.10)
+            if eb > et and er > el and fore_lums:
+                avg_fore = sum(fore_lums) / len(fore_lums)
+                brow_crop = pil.crop((el, et, er, eb))
+                pixels = list(brow_crop.getdata())
+                if pixels:
+                    # Ratio of pixels darker than 55 % of forehead luminance
+                    threshold = avg_fore * 0.55
+                    dark_ratio = sum(1 for p in pixels if _lum(*p) < threshold) / len(
+                        pixels
+                    )
+                    brow_dark_ratios.append(dark_ratio)
+
+        if not brow_dark_ratios:
+            return "unknown"
+
+        avg_ratio = sum(brow_dark_ratios) / len(brow_dark_ratios)
+        print(f"[Demask] Gender hint: eyebrow dark-pixel ratio={avg_ratio:.3f}")
+
+        # Empirically: male brow ratio tends to be > 0.20, female < 0.14
+        if avg_ratio > 0.20:
+            return "man"
+        elif avg_ratio < 0.13:
+            return "woman"
+        else:
+            return "unknown"
+
+    except Exception as e:
+        print(f"[Demask] Gender detection failed ({e}); using unknown.")
+        return "unknown"
+
+
+def _prefill_mask_with_skin(
+    image_bytes: bytes,
+    mask_bytes: bytes,
+    face_boxes: list,
+) -> bytes:
+    """
+    Before handing the image to SD inpainting, fill the masked (gaiter/balaclava)
+    region with the subject's approximate skin colour sampled from the forehead.
+
+    Why: SD inpainting sees the white gaiter and associates it with a face
+    covering, so it generates a replacement mask (surgical mask etc.) instead
+    of facial features.  By painting the covered region with skin colour first,
+    the model is presented with a flesh-coloured blank and generates actual
+    face anatomy rather than another mask.
+    """
+    from PIL import Image as PILImage
+
+    try:
+        original = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        mask_pil = PILImage.open(BytesIO(mask_bytes)).convert("L")
+        w, h = original.size
+
+        # Sample forehead for skin colour
+        skin_r, skin_g, skin_b = 200, 170, 150  # neutral fallback
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+            ft = top
+            fb = top + max(1, int(fh * 0.20))
+            fl = left + int(fw * 0.25)
+            fr = right - int(fw * 0.25)
+            if fb > ft and fr > fl:
+                crop = original.crop((fl, ft, fr, fb))
+                pixels = list(crop.getdata())
+                if pixels:
+                    skin_r = sum(p[0] for p in pixels) // len(pixels)
+                    skin_g = sum(p[1] for p in pixels) // len(pixels)
+                    skin_b = sum(p[2] for p in pixels) // len(pixels)
+                break
+
+        # Fill mask region with skin colour
+        skin_fill = PILImage.new("RGB", (w, h), (skin_r, skin_g, skin_b))
+        prefilled = PILImage.composite(skin_fill, original, mask_pil)
+
+        buf = BytesIO()
+        prefilled.save(buf, format="PNG")
+        print(
+            f"[Demask] Pre-filled mask region with skin colour "
+            f"rgb({skin_r},{skin_g},{skin_b})."
+        )
+        return buf.getvalue()
+
+    except Exception as e:
+        print(f"[Demask] Skin pre-fill failed ({e}); using original image.")
+        return image_bytes
+
+
+def _sample_skin_tone(
+    image_bytes: bytes,
+    face_boxes: list,
+) -> str:
+    """
+    Sample pixels from the forehead region (above the covered area) to derive
+    a rough skin-tone description that can be injected into the inpainting
+    prompt. This anchors the model to the subject's actual complexion so it
+    does not generate a face with the wrong ethnicity.
+    """
+    from PIL import Image as PILImage
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        w_img, h_img = pil.size
+
+        samples: list[tuple[int, int, int]] = []
+
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+            # Forehead strip: top 20 % of the face box, centre 50 % horizontally
+            fore_top = top
+            fore_bot = top + max(1, int(fh * 0.20))
+            fore_left = left + int(fw * 0.25)
+            fore_right = right - int(fw * 0.25)
+            if fore_bot <= fore_top or fore_right <= fore_left:
+                continue
+            crop = pil.crop((fore_left, fore_top, fore_right, fore_bot))
+            samples.extend(list(crop.getdata()))
+
+            # Also sample neck region just below the face box
+            neck_top = bottom + int(fh * 0.05)
+            neck_bot = min(h_img, bottom + int(fh * 0.25))
+            if neck_bot > neck_top:
+                neck_crop = pil.crop((fore_left, neck_top, fore_right, neck_bot))
+                samples.extend(list(neck_crop.getdata()))
+
+        if not samples:
+            return "natural skin tone"
+
+        avg_r = sum(p[0] for p in samples) // len(samples)
+        avg_g = sum(p[1] for p in samples) // len(samples)
+        avg_b = sum(p[2] for p in samples) // len(samples)
+
+        # Rough ITA (Individual Typology Angle) approximation to classify tone
+        if avg_r > 210 and avg_g > 180:
+            return "very fair caucasian skin, light complexion, pale skin"
+        elif avg_r > 185 and avg_g > 150:
+            return "fair caucasian skin, light skin tone"
+        elif avg_r > 160 and avg_g > 120:
+            return "medium skin tone, light-medium complexion"
+        elif avg_r > 130 and avg_g > 90:
+            return "olive or tan skin tone, medium-dark complexion"
+        elif avg_r > 100:
+            return "dark skin tone, brown complexion"
+        else:
+            return "very dark skin tone, deep brown complexion"
+
+    except Exception as e:
+        print(f"[Demask] Skin tone sampling failed ({e}); using generic hint.")
+        return "natural skin tone"
+
+
+def _detect_facial_hair(
+    image_bytes: bytes,
+    face_boxes: list,
+) -> str:
+    """
+    Analyse the visible jaw/cheek sides (the strip between the eyes and where
+    the gaiter begins) to determine whether facial hair is present.
+
+    Strategy:
+      - Forehead brightness   → baseline clean-skin luminance
+      - Jaw-side brightness   → sample the outer edges of the face just above
+                                the mask line (50 % of face height) where the
+                                sides of the jaw are often still exposed
+      - If the jaw area is significantly darker than the forehead the contrast
+        is characteristic of beard/stubble shadow → return "has_facial_hair"
+      - If similar luminance  → return "clean_shaven"
+      - If we cannot get enough pixels → return "unknown" (prompt stays neutral)
+
+    Luminance is computed as (R*0.299 + G*0.587 + B*0.114) to match human
+    perception; hair shows up as a drop in luminance rather than just red.
+    """
+    from PIL import Image as PILImage
+
+    def _lum(r, g, b):
+        return r * 0.299 + g * 0.587 + b * 0.114
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        w_img, h_img = pil.size
+
+        fore_lums: list[float] = []
+        jaw_lums: list[float] = []
+
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+
+            if fh < 40 or fw < 40:
+                continue
+
+            # ── Forehead baseline (top 20 %, centre 40 % width) ───────────────
+            ft = top
+            fb = top + max(1, int(fh * 0.20))
+            fl = left + int(fw * 0.30)
+            fr = right - int(fw * 0.30)
+            if fb > ft and fr > fl:
+                crop = pil.crop((fl, ft, fr, fb))
+                fore_lums.extend(_lum(*p) for p in crop.getdata())
+
+            # ── Jaw/cheek sides — outer 15 % of width, 40–55 % of height ─────
+            # This strip sits between the eyes and the gaiter line and is the
+            # region most likely to show stubble shadow even when masked.
+            jt = top + int(fh * 0.40)
+            jb = top + int(fh * 0.56)
+            # Left strip
+            jaw_left_r = min(w_img, left + int(fw * 0.15))
+            if jb > jt and jaw_left_r > left:
+                crop_l = pil.crop((left, jt, jaw_left_r, jb))
+                jaw_lums.extend(_lum(*p) for p in crop_l.getdata())
+            # Right strip
+            jaw_right_l = max(0, right - int(fw * 0.15))
+            if jb > jt and right > jaw_right_l:
+                crop_r = pil.crop((jaw_right_l, jt, right, jb))
+                jaw_lums.extend(_lum(*p) for p in crop_r.getdata())
+
+        if len(fore_lums) < 20 or len(jaw_lums) < 10:
+            print("[Demask] Facial hair detection: insufficient pixels → unknown")
+            return "unknown"
+
+        avg_fore = sum(fore_lums) / len(fore_lums)
+        avg_jaw = sum(jaw_lums) / len(jaw_lums)
+        drop = avg_fore - avg_jaw  # positive = jaw is darker than forehead
+
+        print(
+            f"[Demask] Facial hair: forehead_lum={avg_fore:.1f}, "
+            f"jaw_lum={avg_jaw:.1f}, drop={drop:.1f}"
+        )
+
+        # A drop of ~18+ luminance units is characteristic of visible stubble
+        # (light stubble ≈ 18–30, full beard ≈ 30+).
+        # Values below 12 are within normal skin variation (no hair).
+        if drop >= 30:
+            return "has_facial_hair"  # clear beard/heavy stubble
+        elif drop >= 18:
+            return "likely_facial_hair"  # light stubble likely present
+        elif drop >= 12:
+            return "unknown"  # ambiguous — stay neutral
+        else:
+            return "clean_shaven"
+
+    except Exception as e:
+        print(f"[Demask] Facial hair detection failed ({e}); defaulting to unknown.")
+        return "unknown"
+
+
+def _generate_face_coverage_mask(image_bytes: bytes) -> tuple[bytes, list, bool]:
+    """
+    Generate a PNG inpainting mask that covers the face-covering region
+    (gaiter, balaclava, surgical mask, ski mask, etc.) in WHITE.
+    Everything outside the mask stays BLACK and is left pixel-perfect by
+    the inpainting model.
+
+    Detection priority:
+      1. face_recognition (dlib CNN) — handles partially occluded faces well
+      2. OpenCV Haar cascade (frontal + profile) — fast backup
+      3. Head-region heuristic — upper-centre of image when all detectors fail
+         (people wearing full gaiters/balaclavas have no detectable facial
+          features so classic detectors always miss them; the heuristic places
+          a generous mask where a head is statistically most likely to appear)
+
+    The mask covers from roughly eye-level down through the chin so that
+    forehead, hair and eyebrows remain untouched — those are the identity
+    cues that constrain the inpainting model and prevent gender swaps.
+    """
+    import cv2
+    import numpy as np
+    from PIL import Image as PILImage
+    from PIL import ImageDraw, ImageFilter
+
+    # ── decode image ──────────────────────────────────────────────────────────
+    pil_img = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+    w_img, h_img = pil_img.size
+
+    # face_locations returns (top, right, bottom, left) in CSS order
+    face_boxes: list = []  # (top, right, bottom, left)
+
+    # ── 1. face_recognition (dlib) ────────────────────────────────────────────
+    try:
+        import face_recognition
+        import numpy as np_fr
+
+        img_array = np_fr.array(pil_img)
+        # "cnn" model is more robust on occluded/angled faces; fall back to
+        # "hog" if dlib was built without CUDA to keep latency acceptable.
+        try:
+            locations = face_recognition.face_locations(img_array, model="cnn")
+        except Exception:
+            locations = face_recognition.face_locations(img_array, model="hog")
+
+        if locations:
+            face_boxes = list(locations)
+            print(f"[Demask] face_recognition found {len(face_boxes)} face(s).")
+    except Exception as e:
+        print(f"[Demask] face_recognition unavailable ({e}); trying OpenCV.")
+
+    # ── 2. OpenCV Haar cascade fallback ───────────────────────────────────────
+    if not face_boxes:
+        try:
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            img_cv = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            if img_cv is not None:
+                gray = cv2.equalizeHist(cv2.cvtColor(img_cv, cv2.COLOR_BGR2GRAY))
+
+                for cascade_name in (
+                    "haarcascade_frontalface_default.xml",
+                    "haarcascade_frontalface_alt2.xml",
+                    "haarcascade_profileface.xml",
+                ):
+                    cascade = cv2.CascadeClassifier(
+                        cv2.data.haarcascades + cascade_name
+                    )
+                    detected = cascade.detectMultiScale(
+                        gray,
+                        scaleFactor=1.05,
+                        minNeighbors=3,
+                        minSize=(50, 50),
+                    )
+                    if len(detected) > 0:
+                        # Convert OpenCV (x,y,w,h) → (top,right,bottom,left)
+                        for fx, fy, fw, fh in detected:
+                            face_boxes.append((fy, fx + fw, fy + fh, fx))
+                        print(
+                            f"[Demask] OpenCV ({cascade_name}) found "
+                            f"{len(face_boxes)} face(s)."
+                        )
+                        break
+        except Exception as e:
+            print(f"[Demask] OpenCV cascade failed ({e}).")
+
+    # ── 3. Head-region heuristic (fully occluded face fallback) ───────────────
+    # When someone wears a full gaiter + cap, zero facial features are exposed
+    # so any detector will fail.  We place a generous mask in the upper-centre
+    # of the frame — statistically where a head appears in portrait/bust shots.
+    used_heuristic = False
+    if not face_boxes:
+        print(
+            "[Demask] No face detected (subject likely fully covered). "
+            "Applying head-region heuristic mask."
+        )
+        used_heuristic = True
+        # Upper-centre band: horizontally centred, spanning ~15 %–70 % of height
+        pad_x = int(w_img * 0.20)
+        top_y = int(h_img * 0.10)
+        bot_y = int(h_img * 0.72)
+        face_boxes = [(top_y, w_img - pad_x, bot_y, pad_x)]
+
+    # ── Build mask ────────────────────────────────────────────────────────────
+    mask = PILImage.new("L", (w_img, h_img), 0)
+    draw = ImageDraw.Draw(mask)
+
+    for top, right, bottom, left in face_boxes:
+        fh = bottom - top
+        fw = right - left
+
+        # Cover from ~50 % below the top of the face box (nose-bridge line) down
+        # to just below the chin.  Starting at 50 % avoids masking the eyes and
+        # upper nose, which are the strongest identity anchors — leaving them
+        # visible constrains the model and reduces hallucinated features.
+        pad_x = int(fw * 0.10)
+        mask_top = top + int(fh * 0.50)
+        mask_bottom = min(h_img, bottom + int(fh * 0.06))
+        mask_left = max(0, left - pad_x)
+        mask_right = min(w_img, right + pad_x)
+
+        draw.rectangle([mask_left, mask_top, mask_right, mask_bottom], fill=255)
+
+    # Feather edges so the inpainted region blends naturally at boundaries
+    mask = mask.filter(ImageFilter.GaussianBlur(radius=6))
+    mask = mask.point(lambda p: 255 if p > 25 else 0)
+
+    buf = BytesIO()
+    mask.save(buf, format="PNG")
+    return buf.getvalue(), face_boxes, used_heuristic
+
+
+def _detect_gender_from_body(image_bytes: bytes) -> str:
+    """
+    Estimate gender from visible upper-body cues when the face is fully covered
+    and the eyebrow-based heuristic cannot be trusted.
+
+    Strategy: compare shoulder width (sampled at ~35–45 % image height) against
+    the waist/lower-torso width (sampled at ~65–75 % image height).  Male bodies
+    typically have shoulders wider than or equal to the hips; female bodies tend
+    to narrow more at the waist relative to the shoulders.
+
+    We also look at the average colour saturation in both strips — high-contrast
+    tactical/military gear (low saturation, dark tones) is a weak but useful cue.
+
+    Returns: "man", "woman", or "unknown"
+    """
+    from PIL import Image as PILImage
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        w_img, h_img = pil.size
+
+        # ── shoulder strip: 35–45 % of image height, centre 80 % of width ──
+        sh_top = int(h_img * 0.35)
+        sh_bot = int(h_img * 0.45)
+        sh_left = int(w_img * 0.10)
+        sh_right = int(w_img * 0.90)
+        if sh_bot <= sh_top or sh_right <= sh_left:
+            return "unknown"
+
+        shoulder_crop = pil.crop((sh_left, sh_top, sh_right, sh_bot))
+        sh_pixels = list(shoulder_crop.getdata())
+
+        # ── waist/hip strip: 65–75 % of image height, centre 80 % of width ──
+        wp_top = int(h_img * 0.65)
+        wp_bot = int(h_img * 0.75)
+        wp_left = int(w_img * 0.10)
+        wp_right = int(w_img * 0.90)
+
+        # Determine effective occupied width in each strip by finding the
+        # outermost non-background pixels (significantly darker than the
+        # image average brightness, which avoids false-positives from light bg).
+        def _effective_width(pixels, strip_w, strip_h, threshold_lum=200):
+            """Return fraction of strip width that contains non-background pixels."""
+            if not pixels or strip_w <= 0 or strip_h <= 0:
+                return 0.5
+            # Build column luminance averages
+            col_lums = []
+            for col in range(strip_w):
+                col_pix = [
+                    pixels[row * strip_w + col]
+                    for row in range(strip_h)
+                    if row * strip_w + col < len(pixels)
+                ]
+                if col_pix:
+                    avg_l = sum(
+                        p[0] * 0.299 + p[1] * 0.587 + p[2] * 0.114 for p in col_pix
+                    ) / len(col_pix)
+                    col_lums.append(avg_l)
+            # Count columns below the background threshold (non-background)
+            occupied = sum(1 for l in col_lums if l < threshold_lum)
+            return occupied / max(1, len(col_lums))
+
+        sh_w = sh_right - sh_left
+        sh_h = sh_bot - sh_top
+        sh_frac = _effective_width(sh_pixels, sh_w, sh_h)
+
+        wp_frac = 0.5  # default
+        if wp_bot > wp_top and wp_right > wp_left:
+            waist_crop = pil.crop((wp_left, wp_top, wp_right, wp_bot))
+            wp_pixels = list(waist_crop.getdata())
+            wp_frac = _effective_width(wp_pixels, wp_right - wp_left, wp_bot - wp_top)
+
+        ratio = sh_frac / max(wp_frac, 0.01)
+        print(
+            f"[Demask] Body gender: shoulder_frac={sh_frac:.3f}, "
+            f"waist_frac={wp_frac:.3f}, ratio={ratio:.3f}"
+        )
+
+        # Broader shoulders relative to waist → "man"
+        # Male ratio typically ≥ 1.05; female ratio typically ≤ 0.97
+        if ratio >= 1.05:
+            return "man"
+        elif ratio <= 0.95:
+            return "woman"
+        else:
+            return "unknown"
+
+    except Exception as e:
+        print(f"[Demask] Body gender detection failed ({e}); returning unknown.")
+        return "unknown"
+
+
+def _crop_for_inpainting(
+    image_bytes: bytes,
+    mask_bytes: bytes,
+    face_boxes: list,
+) -> tuple:
+    """
+    Crop the face region (+ generous padding) from the full image and mask,
+    resize both to 512×512 for SD inpainting, and return everything needed
+    to composite the result back onto the original later.
+
+    Returns:
+        crop_img_b64  – base64 data-URI of the 512×512 crop
+        crop_mask_b64 – base64 data-URI of the 512×512 mask crop
+        crop_region   – (left, top, right, bottom) in original pixel coords
+        orig_size     – (width, height) of the original image
+        crop_size     – (width, height) of the un-resized crop
+    """
+    from PIL import Image as PILImage
+
+    original = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+    mask_pil = PILImage.open(BytesIO(mask_bytes)).convert("L")
+    orig_w, orig_h = original.size
+
+    if not face_boxes:
+        # No face box — send full image, caller composites normally
+        b64_img = f"data:image/png;base64,{base64.b64encode(image_bytes).decode()}"
+        b64_msk = f"data:image/png;base64,{base64.b64encode(mask_bytes).decode()}"
+        return (
+            b64_img,
+            b64_msk,
+            (0, 0, orig_w, orig_h),
+            (orig_w, orig_h),
+            (orig_w, orig_h),
+        )
+
+    # Build a bounding box that encompasses all detected faces + 60 % padding
+    tops = [b[0] for b in face_boxes]
+    rights = [b[1] for b in face_boxes]
+    bottoms = [b[2] for b in face_boxes]
+    lefts = [b[3] for b in face_boxes]
+
+    fh = min(bottoms) - max(tops)
+    fw = max(rights) - min(lefts)
+    pad = int(max(fh, fw) * 0.60)
+
+    cl = max(0, min(lefts) - pad)
+    ct = max(0, min(tops) - pad)
+    cr = min(orig_w, max(rights) + pad)
+    cb = min(orig_h, max(bottoms) + pad)
+
+    # Enforce minimum 256 px on each axis
+    if cr - cl < 256:
+        extra = (256 - (cr - cl)) // 2
+        cl = max(0, cl - extra)
+        cr = min(orig_w, cr + extra)
+    if cb - ct < 256:
+        extra = (256 - (cb - ct)) // 2
+        ct = max(0, ct - extra)
+        cb = min(orig_h, cb + extra)
+
+    crop_region = (cl, ct, cr, cb)
+    crop_w, crop_h = cr - cl, cb - ct
+
+    img_crop = original.crop(crop_region).resize((512, 512), PILImage.LANCZOS)
+    mask_crop = mask_pil.crop(crop_region).resize((512, 512), PILImage.NEAREST)
+
+    buf_i = BytesIO()
+    img_crop.save(buf_i, format="PNG")
+    buf_m = BytesIO()
+    mask_crop.save(buf_m, format="PNG")
+
+    b64_img = f"data:image/png;base64,{base64.b64encode(buf_i.getvalue()).decode()}"
+    b64_msk = f"data:image/png;base64,{base64.b64encode(buf_m.getvalue()).decode()}"
+
+    return b64_img, b64_msk, crop_region, (orig_w, orig_h), (crop_w, crop_h)
+
+
 @app.post("/sh-api/demask")
 async def api_demask(
     file: UploadFile = File(...),
     x_plugin_token: Optional[str] = Header(default=None, alias="X-Plugin-Token"),
 ):
     """
-    AI demasking using Replicate library for automatic version management.
-    Performs mask removal followed by face restoration for forensic clarity.
+    AI demasking pipeline (Replicate):
+
+    Step 1 — Skin-tone sampling
+        Samples visible skin pixels from the forehead / neck region so the
+        inpainting prompt is anchored to the subject's actual complexion.
+
+    Step 2 — SD Inpainting (stability-ai/stable-diffusion-inpainting)
+        An auto-generated mask covers only the face-covering region.
+        SD inpainting fills ONLY that region; everything else is untouched.
+
+    Step 3 — Composite back onto original
+        The SD model outputs at 512 × 512.  We up-sample just the masked
+        pixels and composite them back over the original full-resolution
+        image so the result is never cropped or zoomed.
+
+    CodeFormer is intentionally omitted — it turns faces into 3-D renders.
+
+    Fallback — instruct-pix2pix with corrected guidance if inpainting fails.
     """
     require_admin(x_plugin_token)
 
-    # 1. Get Replicate API Token
+    # ── 1. Replicate token ────────────────────────────────────────────────────
     settings = settings_store.load()
     replicate_token = (os.getenv("REPLICATE_API_TOKEN") or "").strip() or settings.get(
         "replicate_api_token"
@@ -967,6 +1570,7 @@ async def api_demask(
         replicate_token = replicate_token.get("value")
 
     if not replicate_token:
+        # Try local face-restoration service as last resort
         try:
             content = await file.read()
             restored_bytes = await restore_face(content, strength=0.7)
@@ -975,158 +1579,321 @@ async def api_demask(
                     BytesIO(restored_bytes), media_type="image/png"
                 )
         except Exception as e:
-            print(f"[DEBUG] Local demask fallback failed: {e}")
-
+            print(f"[Demask] Local fallback failed: {e}")
         raise HTTPException(
             status_code=400,
-            detail="AI service unavailable. Configure REPLICATE_API_TOKEN or SOCIAL_HUNT_FACE_AI_URL.",
+            detail="AI service unavailable. Configure REPLICATE_API_TOKEN in Settings.",
         )
 
     try:
-        # 2. Prepare the image
+        # ── 2. Read & encode image ────────────────────────────────────────────
         content = await file.read()
-        print(f"[DEBUG] Demasking: processing {file.filename}")
+        print(f"[Demask] Processing: {file.filename}  ({len(content)} bytes)")
 
-        # Prefer direct Base64 encoding for better reliability with Replicate model containers
-        b64_img = (
-            f"data:{file.content_type};base64,{base64.b64encode(content).decode()}"
-        )
-
-        # 3. Step 1: Remove the mask using Pix2Pix
-        print("[DEBUG] Demasking: step 1 (instruct-pix2pix)...")
+        mime = file.content_type or "image/jpeg"
+        b64_img = f"data:{mime};base64,{base64.b64encode(content).decode()}"
 
         rep_client = replicate.Client(api_token=replicate_token)
 
-        # Programmatically fetch latest versions to avoid 404 errors
-        try:
-            model_pix2pix = await asyncio.to_thread(
-                rep_client.models.get, "timothybrooks/instruct-pix2pix"
+        # ── 3. Auto-generate face coverage mask ───────────────────────────────
+        print("[Demask] Generating face coverage mask…")
+        mask_bytes, face_boxes, used_heuristic = await asyncio.to_thread(
+            _generate_face_coverage_mask, content
+        )
+        print(f"[Demask] Mask generated. used_heuristic={used_heuristic}")
+
+        # ── 4. Sample visible skin tone, detect gender and facial hair ────────
+        skin_tone_hint = await asyncio.to_thread(_sample_skin_tone, content, face_boxes)
+        print(f"[Demask] Skin tone sampled: {skin_tone_hint}")
+
+        if used_heuristic:
+            # The heuristic face-box spans a huge region (10–72 % of height) that
+            # does NOT correspond to real facial regions — the eyebrow-darkness
+            # approach produces garbage results (often falsely "woman") when the
+            # cap brim makes forehead + brow strip equally dark.  Fall back to
+            # body-shape analysis instead.
+            gender_hint = await asyncio.to_thread(_detect_gender_from_body, content)
+            print(f"[Demask] Gender hint (body-based, heuristic mode): {gender_hint}")
+        else:
+            gender_hint = await asyncio.to_thread(
+                _detect_gender_hint, content, face_boxes
             )
-            model_codeformer = await asyncio.to_thread(
-                rep_client.models.get, "sczhou/codeformer"
-            )
-            v_pix2pix = model_pix2pix.latest_version.id
-            v_codeformer = model_codeformer.latest_version.id
-        except Exception as me:
-            print(f"[ERROR] Failed to fetch Replicate model metadata: {me}")
-            # Use safe defaults if metadata fetch fails
-            v_pix2pix = (
-                "30c1d0b916a6f8efce20493f5d61ee27491ab2a60437c13c588468b9810ec23f"
-            )
-            v_codeformer = (
-                "7de2ea4a352033cfa2f21683c7a9511da922ec5ad9f9e61298d0b3dd16742617"
-            )
+            print(f"[Demask] Gender hint (eyebrow-based): {gender_hint}")
+
+        # ── 4b. Pre-fill gaiter region with skin colour ────────────────────────
+        # This prevents SD from "replacing mask with mask" — the model sees
+        # flesh-coloured pixels and generates facial features instead.
+        prefilled_content = await asyncio.to_thread(
+            _prefill_mask_with_skin, content, mask_bytes, face_boxes
+        )
+
+        # ── 5. Crop face region for focused, low-upscale inpainting ──────────
+        # Sending just the face crop to SD (resized to 512×512) and pasting the
+        # result back means we only upscale by ~1.3× instead of 2–3×, which
+        # eliminates most of the plastic/smooth render look.
+        print("[Demask] Preparing face crop for inpainting…")
+        (
+            crop_b64_img,
+            crop_b64_mask,
+            crop_region,
+            orig_size,
+            crop_size,
+        ) = await asyncio.to_thread(
+            _crop_for_inpainting, prefilled_content, mask_bytes, face_boxes
+        )
+
+        # ── 6. Resolve inpainting models ──────────────────────────────────────
+        # Primary: lucataco/realistic-vision-v5-inpainting — photorealistic
+        #          fine-tune of SD 1.5, produces natural skin texture and avoids
+        #          the "plastic CGI face" characteristic of the base model.
+        # Fallback: stability-ai/stable-diffusion-inpainting (SD 1.5 base)
+        INPAINT_PRIMARY = "lucataco/realistic-vision-v5-inpainting"
+        INPAINT_SECONDARY = "stability-ai/stable-diffusion-inpainting"
+
+        v_inpaint_primary = None
+        v_inpaint_secondary = None
 
         try:
-            # Reverting to Pix2Pix with optimized forensic parameters to fix identity loss and distortion
-            output_1 = await asyncio.to_thread(
-                rep_client.run,
-                f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
-                input={
-                    "image": b64_img,
-                    "prompt": "remove only the face covering (mask, balaclava, ski mask, sunglasses); keep the same people, clothing, pose, background, and number of people unchanged; preserve identity; realistic face",
-                    "negative_prompt": "new person, different identity, change gender, change ethnicity, extra faces, extra people, cloned face, multiple heads, distorted, blurry, cartoon, mask remains, makeup, jungle, trees, nature, psychedelic, abstract, colorful, mutation, deformed, ugly, bad anatomy, bad proportions, extra limbs, fused fingers, too many fingers, long neck",
-                    "num_inference_steps": 25,
-                    "image_guidance_scale": 2.4,  # Preserve structure to reduce hallucinations
-                    "guidance_scale": 3.0,  # Reduce aggressive edits
-                },
-            )
-            # Ensure output is converted from FileOutput object to string URL
-            if isinstance(output_1, list) and len(output_1) > 0:
-                inpainted_url = str(output_1[0])
-            else:
-                inpainted_url = str(output_1)
+            m_primary = await asyncio.to_thread(rep_client.models.get, INPAINT_PRIMARY)
+            v_inpaint_primary = m_primary.latest_version.id
+            print(f"[Demask] Primary model: {INPAINT_PRIMARY}@{v_inpaint_primary}")
         except Exception as e:
-            print(f"[ERROR] Demasking Step 1 failed: {e}")
+            print(f"[Demask] Could not fetch primary model ({e}); will use secondary.")
 
-            # Fallback to Catbox if Base64 failed (sometimes happens with large payloads or 404s)
-            print("[DEBUG] Attempting Catbox fallback for Step 1...")
-            inpainted_url = ""
+        try:
+            m_secondary = await asyncio.to_thread(
+                rep_client.models.get, INPAINT_SECONDARY
+            )
+            v_inpaint_secondary = m_secondary.latest_version.id
+        except Exception:
+            # Pinned SD 1.5 inpainting version as last resort
+            v_inpaint_secondary = (
+                "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef"
+            )
+
+        # ── 6b. Detect facial hair from visible jaw/cheek sides ───────────────
+        facial_hair_result = await asyncio.to_thread(
+            _detect_facial_hair, content, face_boxes
+        )
+        print(f"[Demask] Facial hair analysis: {facial_hair_result}")
+
+        # Build prompt/negative dynamically based on detection result
+        NEGATIVE_BASE = (
+            "cartoon, 3d render, cgi, anime, illustration, painting, drawing, "
+            "plastic skin, smooth skin, airbrushed, overly smooth, "
+            "different gender, different ethnicity, new person, extra faces, "
+            "mask, balaclava, face covering, surgical mask, sunglasses, "
+            "distorted, blurry, deformed, bad anatomy, watermark, text, logo"
+        )
+
+        if facial_hair_result == "clean_shaven":
+            # Confirmed no visible hair shadow — block it in generation too
+            hair_positive = "clean shaven, no facial hair, smooth jawline,"
+            hair_negative = (
+                "beard, stubble, facial hair, mustache, goatee, five o'clock shadow,"
+            )
+            print("[Demask] Prompt: enforcing clean-shaven appearance.")
+        elif facial_hair_result in ("has_facial_hair", "likely_facial_hair"):
+            # Visible stubble/beard shadow — let the model keep it
+            hair_positive = "with natural facial hair, stubble,"
+            hair_negative = ""  # do NOT block beard in negative
+            print("[Demask] Prompt: allowing/preserving facial hair.")
+        else:
+            # Unknown — stay neutral, do not force or block either way
+            hair_positive = ""
+            hair_negative = ""
+            print("[Demask] Prompt: neutral on facial hair.")
+
+        # NEGATIVE is finalised after gender detection below
+
+        # ── 7. Inpainting on the face crop ────────────────────────────────────
+        # guidance_scale 5.0: low enough to stay photographic, high enough to
+        # actually follow "no mask". Lower = more natural skin, less "stylized".
+        inpainted_url = ""
+
+        gender_positive = f"{gender_hint}, " if gender_hint != "unknown" else ""
+        gender_negative = (
+            "woman, female, girl, "
+            if gender_hint == "man"
+            else "man, male, boy, "
+            if gender_hint == "woman"
+            else ""
+        )
+
+        # When we genuinely cannot determine gender (body analysis was
+        # inconclusive AND the face was fully hidden), SD models are
+        # statistically biased toward generating female faces.  Adding
+        # soft anti-female terms here keeps the output gender-neutral
+        # rather than defaulting female, without forcing "man" either.
+        extra_gender_negative = ""
+        if gender_hint == "unknown" and used_heuristic:
+            extra_gender_negative = (
+                "feminine features, female face, woman's face, girl's face, "
+                "makeup, lipstick, mascara, eyeliner, "
+            )
+            print(
+                "[Demask] Gender unknown in heuristic mode — "
+                "adding anti-female-bias terms to negative prompt."
+            )
+
+        NEGATIVE = NEGATIVE_BASE + (
+            (" " + hair_negative if hair_negative else "")
+            + (" " + gender_negative if gender_negative else "")
+            + (" " + extra_gender_negative if extra_gender_negative else "")
+        )
+
+        INPAINT_INPUT = {
+            "image": crop_b64_img,
+            "mask": crop_b64_mask,
+            "prompt": (
+                f"candid press photo, photojournalism, RAW photo, DSLR, "
+                f"photo-realistic {gender_positive}human face, {skin_tone_hint}, "
+                f"{hair_positive} "
+                "natural skin texture, visible pores, film grain, realistic lighting, "
+                "sharp focus, 8k, same ethnicity, no face covering, no mask, "
+                "no surgical mask, open face, revealed face"
+            ),
+            "negative_prompt": NEGATIVE,
+            "num_outputs": 1,
+            "num_inference_steps": 60,
+            # Lower guidance keeps skin texture natural and prevents the
+            # over-stylised / plastic-skin look that 5.0+ causes.
+            "guidance_scale": 4.0,
+            # K_EULER_ANCESTRAL introduces stochastic noise at each step which
+            # produces more organic, photographic skin compared to the fully
+            # deterministic DPMSolverMultistep.
+            "scheduler": "K_EULER_ANCESTRAL",
+        }
+
+        # ── 7a. Try primary (realistic-vision photorealistic fine-tune) ────────
+        if v_inpaint_primary:
+            print(f"[Demask] Running primary inpainting ({INPAINT_PRIMARY})…")
             try:
-                async with httpx.AsyncClient() as hc:
-                    files = {
-                        "fileToUpload": (file.filename, content, file.content_type)
-                    }
-                    data = {"reqtype": "fileupload", "userhash": ""}
-                    cres = await hc.post(
-                        "https://catbox.moe/user/api.php", data=data, files=files
-                    )
-                    if cres.status_code == 200:
-                        file_url = cres.text.strip()
-                        output_1 = await asyncio.to_thread(
-                            rep_client.run,
-                            f"timothybrooks/instruct-pix2pix:{v_pix2pix}",
-                            input={
-                                "image": file_url,
-                                "prompt": "remove only the face covering (mask, balaclava, ski mask, sunglasses); keep the same people, clothing, pose, background, and number of people unchanged; preserve identity; realistic face",
-                                "negative_prompt": "new person, different identity, change gender, change ethnicity, extra faces, extra people, cloned face, multiple heads, distorted, blurry, cartoon, mask remains, makeup, jungle, trees, nature, psychedelic, abstract, colorful, mutation, deformed, ugly, bad anatomy, bad proportions, extra limbs, fused fingers, too many fingers, long neck",
-                                "num_inference_steps": 25,
-                                "image_guidance_scale": 2.4,
-                                "guidance_scale": 3.0,
-                            },
-                        )
-                        # Ensure output is converted from FileOutput object to string URL
-                        if isinstance(output_1, list) and len(output_1) > 0:
-                            inpainted_url = str(output_1[0])
-                        else:
-                            inpainted_url = str(output_1)
-            except Exception as fe:
-                print(f"[ERROR] Fallback failed: {fe}")
-
-            if not inpainted_url:
-                raise HTTPException(
-                    status_code=500, detail=f"AI Step 1 failed: {str(e)}"
+                out = await asyncio.to_thread(
+                    rep_client.run,
+                    f"{INPAINT_PRIMARY}:{v_inpaint_primary}",
+                    input=INPAINT_INPUT,
                 )
+                inpainted_url = (
+                    str(out[0]) if isinstance(out, list) and out else str(out or "")
+                )
+                if inpainted_url:
+                    print(f"[Demask] Primary succeeded → {inpainted_url}")
+            except Exception as e:
+                print(f"[Demask] Primary inpainting failed ({e}); trying secondary.")
+
+        # ── 7b. Fallback: SD 1.5 base inpainting ──────────────────────────────
+        if not inpainted_url:
+            print(f"[Demask] Running secondary inpainting ({INPAINT_SECONDARY})…")
+            try:
+                out = await asyncio.to_thread(
+                    rep_client.run,
+                    f"{INPAINT_SECONDARY}:{v_inpaint_secondary}",
+                    input=INPAINT_INPUT,
+                )
+                inpainted_url = (
+                    str(out[0]) if isinstance(out, list) and out else str(out or "")
+                )
+                if inpainted_url:
+                    print(f"[Demask] Secondary succeeded → {inpainted_url}")
+            except Exception as e:
+                print(f"[Demask] Secondary inpainting failed: {e}")
+
+        # ── 7c. Last-resort fallback: pix2pix on the full image ───────────────
+        if not inpainted_url:
+            print("[Demask] Falling back to instruct-pix2pix on full image…")
+            mime = file.content_type or "image/jpeg"
+            b64_full = f"data:{mime};base64,{base64.b64encode(content).decode()}"
+            try:
+                m_p2p = await asyncio.to_thread(
+                    rep_client.models.get, "timothybrooks/instruct-pix2pix"
+                )
+                v_p2p = m_p2p.latest_version.id
+            except Exception:
+                v_p2p = (
+                    "30c1d0b916a6f8efce20493f5d61ee27491ab2a60437c13c588468b9810ec23f"
+                )
+            try:
+                output_fb = await asyncio.to_thread(
+                    rep_client.run,
+                    f"timothybrooks/instruct-pix2pix:{v_p2p}",
+                    input={
+                        "image": b64_full,
+                        "prompt": (
+                            f"reveal the face beneath the covering, {skin_tone_hint}, "
+                            f"{hair_positive} "
+                            "keep gender, ethnicity, hair, clothing and background "
+                            "completely unchanged, realistic photo"
+                        ),
+                        "negative_prompt": NEGATIVE,
+                        "num_inference_steps": 60,
+                        "image_guidance_scale": 2.0,
+                        "guidance_scale": 8.0,
+                    },
+                )
+                if isinstance(output_fb, list) and len(output_fb) > 0:
+                    inpainted_url = str(output_fb[0])
+                else:
+                    inpainted_url = str(output_fb) if output_fb else ""
+            except Exception as e2:
+                print(f"[Demask] pix2pix fallback also failed: {e2}")
 
         if not inpainted_url:
-            raise HTTPException(status_code=504, detail="AI Step 1 returned no output.")
-
-        print(f"[DEBUG] Demasking: step 1 complete, url: {inpainted_url}")
-
-        # 4. Step 2: Face Restoration (CodeFormer)
-        print("[DEBUG] Demasking: step 2 (codeformer)...")
-        try:
-            output_2 = await asyncio.to_thread(
-                rep_client.run,
-                f"sczhou/codeformer:{v_codeformer}",
-                input={
-                    "image": inpainted_url,
-                    "upscale": 1,
-                    "face_upsample": True,
-                    "codeformer_fidelity": 1.0,  # Maximized fidelity to further reduce hallucinations
-                },
+            raise HTTPException(
+                status_code=500, detail="Inpainting produced no output."
             )
-            # Ensure output is converted from FileOutput object to string URL
-            if isinstance(output_2, list) and len(output_2) > 0:
-                final_output_url = str(output_2[0])
-            else:
-                final_output_url = str(output_2) if output_2 else None
 
-            if final_output_url:
-                async with httpx.AsyncClient() as hc:
-                    img_res = await hc.get(final_output_url)
-                    return StreamingResponse(
-                        BytesIO(img_res.content), media_type="image/png"
-                    )
+        print(f"[Demask] Inpainting complete → {inpainted_url}")
 
-            # Fallback to step 1 result
+        # ── 8. Composite crop result back onto the original ───────────────────
+        # The SD result is 512×512 of the face crop.  We resize it back to the
+        # crop's original pixel dimensions (e.g. 320×400) — a much smaller
+        # upscale than going straight to full-image size — then paste it back
+        # using the mask so only the covered region changes.
+        print("[Demask] Compositing crop result onto original image…")
+        try:
+            from PIL import Image as PILImage
+
+            async with httpx.AsyncClient() as hc:
+                inp_resp = await hc.get(inpainted_url)
+            inpainted_pil = PILImage.open(BytesIO(inp_resp.content)).convert("RGB")
+
+            original_pil = PILImage.open(BytesIO(content)).convert("RGB")
+            orig_w, orig_h = original_pil.size
+
+            cl, ct, cr, cb = crop_region
+            crop_w, crop_h = crop_size
+
+            # Resize the 512×512 SD result back to the crop's native dimensions
+            inpainted_crop = inpainted_pil.resize((crop_w, crop_h), PILImage.LANCZOS)
+
+            # Get the matching crop of the full-res mask for compositing
+            mask_pil_full = PILImage.open(BytesIO(mask_bytes)).convert("L")
+            mask_crop_pil = mask_pil_full.crop((cl, ct, cr, cb))
+
+            # composite(A, B, mask): A where mask=white, B where mask=black
+            orig_crop = original_pil.crop((cl, ct, cr, cb))
+            merged_crop = PILImage.composite(inpainted_crop, orig_crop, mask_crop_pil)
+
+            # Paste the merged crop back onto a full-resolution copy of original
+            result = original_pil.copy()
+            result.paste(merged_crop, (cl, ct))
+
+            out_buf = BytesIO()
+            result.save(out_buf, format="PNG")
+            out_buf.seek(0)
+            return StreamingResponse(out_buf, media_type="image/png")
+
+        except Exception as comp_err:
+            print(f"[Demask] Composite failed ({comp_err}); returning raw inpaint.")
             async with httpx.AsyncClient() as hc:
                 img_res = await hc.get(inpainted_url)
-                return StreamingResponse(
-                    BytesIO(img_res.content), media_type="image/png"
-                )
-        except Exception as e:
-            print(f"[WARN] Demasking Step 2 failed: {e}. Returning Step 1 result.")
-            async with httpx.AsyncClient() as hc:
-                img_res = await hc.get(inpainted_url)
-                return StreamingResponse(
-                    BytesIO(img_res.content), media_type="image/png"
-                )
+            return StreamingResponse(BytesIO(img_res.content), media_type="image/png")
 
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[ERROR] Demasking failed: {e}")
+        print(f"[Demask] Unhandled error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
