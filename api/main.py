@@ -1011,6 +1011,101 @@ def _sample_skin_tone(
         return "natural skin tone"
 
 
+def _detect_facial_hair(
+    image_bytes: bytes,
+    face_boxes: list,
+) -> str:
+    """
+    Analyse the visible jaw/cheek sides (the strip between the eyes and where
+    the gaiter begins) to determine whether facial hair is present.
+
+    Strategy:
+      - Forehead brightness   → baseline clean-skin luminance
+      - Jaw-side brightness   → sample the outer edges of the face just above
+                                the mask line (50 % of face height) where the
+                                sides of the jaw are often still exposed
+      - If the jaw area is significantly darker than the forehead the contrast
+        is characteristic of beard/stubble shadow → return "has_facial_hair"
+      - If similar luminance  → return "clean_shaven"
+      - If we cannot get enough pixels → return "unknown" (prompt stays neutral)
+
+    Luminance is computed as (R*0.299 + G*0.587 + B*0.114) to match human
+    perception; hair shows up as a drop in luminance rather than just red.
+    """
+    from PIL import Image as PILImage
+
+    def _lum(r, g, b):
+        return r * 0.299 + g * 0.587 + b * 0.114
+
+    try:
+        pil = PILImage.open(BytesIO(image_bytes)).convert("RGB")
+        w_img, h_img = pil.size
+
+        fore_lums: list[float] = []
+        jaw_lums: list[float] = []
+
+        for top, right, bottom, left in face_boxes:
+            fh = bottom - top
+            fw = right - left
+
+            if fh < 40 or fw < 40:
+                continue
+
+            # ── Forehead baseline (top 20 %, centre 40 % width) ───────────────
+            ft = top
+            fb = top + max(1, int(fh * 0.20))
+            fl = left + int(fw * 0.30)
+            fr = right - int(fw * 0.30)
+            if fb > ft and fr > fl:
+                crop = pil.crop((fl, ft, fr, fb))
+                fore_lums.extend(_lum(*p) for p in crop.getdata())
+
+            # ── Jaw/cheek sides — outer 15 % of width, 40–55 % of height ─────
+            # This strip sits between the eyes and the gaiter line and is the
+            # region most likely to show stubble shadow even when masked.
+            jt = top + int(fh * 0.40)
+            jb = top + int(fh * 0.56)
+            # Left strip
+            jaw_left_r = min(w_img, left + int(fw * 0.15))
+            if jb > jt and jaw_left_r > left:
+                crop_l = pil.crop((left, jt, jaw_left_r, jb))
+                jaw_lums.extend(_lum(*p) for p in crop_l.getdata())
+            # Right strip
+            jaw_right_l = max(0, right - int(fw * 0.15))
+            if jb > jt and right > jaw_right_l:
+                crop_r = pil.crop((jaw_right_l, jt, right, jb))
+                jaw_lums.extend(_lum(*p) for p in crop_r.getdata())
+
+        if len(fore_lums) < 20 or len(jaw_lums) < 10:
+            print("[Demask] Facial hair detection: insufficient pixels → unknown")
+            return "unknown"
+
+        avg_fore = sum(fore_lums) / len(fore_lums)
+        avg_jaw = sum(jaw_lums) / len(jaw_lums)
+        drop = avg_fore - avg_jaw  # positive = jaw is darker than forehead
+
+        print(
+            f"[Demask] Facial hair: forehead_lum={avg_fore:.1f}, "
+            f"jaw_lum={avg_jaw:.1f}, drop={drop:.1f}"
+        )
+
+        # A drop of ~18+ luminance units is characteristic of visible stubble
+        # (light stubble ≈ 18–30, full beard ≈ 30+).
+        # Values below 12 are within normal skin variation (no hair).
+        if drop >= 30:
+            return "has_facial_hair"  # clear beard/heavy stubble
+        elif drop >= 18:
+            return "likely_facial_hair"  # light stubble likely present
+        elif drop >= 12:
+            return "unknown"  # ambiguous — stay neutral
+        else:
+            return "clean_shaven"
+
+    except Exception as e:
+        print(f"[Demask] Facial hair detection failed ({e}); defaulting to unknown.")
+        return "unknown"
+
+
 def _generate_face_coverage_mask(image_bytes: bytes) -> tuple[bytes, list]:
     """
     Generate a PNG inpainting mask that covers the face-covering region
@@ -1316,15 +1411,40 @@ async def api_demask(
                 "a9758cbfbd5f3c2094457d996681af52552901775aa2d6dd0b17fd15df959bef"
             )
 
-        # Shared negative prompt — blocks cartoon look AND hallucinated hair
-        NEGATIVE = (
+        # ── 6b. Detect facial hair from visible jaw/cheek sides ───────────────
+        facial_hair_result = await asyncio.to_thread(
+            _detect_facial_hair, content, face_boxes
+        )
+        print(f"[Demask] Facial hair analysis: {facial_hair_result}")
+
+        # Build prompt/negative dynamically based on detection result
+        NEGATIVE_BASE = (
             "cartoon, 3d render, cgi, anime, illustration, painting, drawing, "
             "plastic skin, smooth skin, airbrushed, overly smooth, "
-            "beard, stubble, facial hair, mustache, goatee, five o'clock shadow, "
             "different gender, different ethnicity, new person, extra faces, "
             "mask, balaclava, face covering, surgical mask, sunglasses, "
             "distorted, blurry, deformed, bad anatomy, watermark, text, logo"
         )
+
+        if facial_hair_result == "clean_shaven":
+            # Confirmed no visible hair shadow — block it in generation too
+            hair_positive = "clean shaven, no facial hair, smooth jawline,"
+            hair_negative = (
+                "beard, stubble, facial hair, mustache, goatee, five o'clock shadow,"
+            )
+            print("[Demask] Prompt: enforcing clean-shaven appearance.")
+        elif facial_hair_result in ("has_facial_hair", "likely_facial_hair"):
+            # Visible stubble/beard shadow — let the model keep it
+            hair_positive = "with natural facial hair, stubble,"
+            hair_negative = ""  # do NOT block beard in negative
+            print("[Demask] Prompt: allowing/preserving facial hair.")
+        else:
+            # Unknown — stay neutral, do not force or block either way
+            hair_positive = ""
+            hair_negative = ""
+            print("[Demask] Prompt: neutral on facial hair.")
+
+        NEGATIVE = NEGATIVE_BASE + (" " + hair_negative if hair_negative else "")
 
         # ── 7. SD Inpainting on the face crop ─────────────────────────────────
         print("[Demask] Running SD inpainting on face crop…")
@@ -1338,8 +1458,8 @@ async def api_demask(
                     "mask": crop_b64_mask,
                     "prompt": (
                         f"photo-realistic human face, {skin_tone_hint}, "
+                        f"{hair_positive} "
                         "natural skin texture, photographic, RAW photo, DSLR, "
-                        "clean shaven, no facial hair, "
                         "same person, same gender, same ethnicity, "
                         "no face covering, no mask"
                     ),
@@ -1380,7 +1500,7 @@ async def api_demask(
                         "image": b64_full,
                         "prompt": (
                             f"reveal the face beneath the covering, {skin_tone_hint}, "
-                            "clean shaven, no facial hair, "
+                            f"{hair_positive} "
                             "keep gender, ethnicity, hair, clothing and background "
                             "completely unchanged, realistic photo"
                         ),
