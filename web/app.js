@@ -3215,7 +3215,19 @@ const logoutBtn = document.querySelector("[data-action='logout']");
 if (logoutBtn) {
   logoutBtn.onclick = () => {
     setToken("");
-    location.reload();
+
+    // Clear theme state before logout
+    document.body.removeAttribute("data-theme");
+    document.body.className = document.body.className
+      .split(" ")
+      .filter((cls) => !cls.startsWith("theme-"))
+      .join(" ");
+
+    // Clear any cached theme data
+    localStorage.removeItem("sh_theme_cache");
+
+    // Force reload to login page
+    window.location.replace("/login");
   };
 }
 
@@ -3358,14 +3370,19 @@ function initializeApp() {
 
 async function loadTheme() {
   try {
+    // Clear any existing theme state first
+    clearThemeState();
+
     const response = await fetch("/sh-api/public/theme");
     const data = await response.json();
 
     // Apply theme without transition to avoid flicker
     if (data.theme && data.theme !== "default") {
       document.body.setAttribute("data-theme", data.theme);
+      console.log(`Theme applied: ${data.theme}`);
     } else {
       document.body.removeAttribute("data-theme");
+      console.log("Default theme applied");
     }
 
     // Force theme refresh
@@ -3373,8 +3390,24 @@ async function loadTheme() {
   } catch (error) {
     console.warn("Theme loading failed:", error);
     // Silently fall back to default theme
+    clearThemeState();
     refreshThemeStyles();
   }
+}
+
+// Clear all theme-related state
+function clearThemeState() {
+  // Remove theme attributes
+  document.body.removeAttribute("data-theme");
+
+  // Remove any theme-related classes
+  document.body.className = document.body.className
+    .split(" ")
+    .filter((cls) => !cls.startsWith("theme-"))
+    .join(" ");
+
+  // Clear cached theme data
+  localStorage.removeItem("sh_theme_cache");
 }
 
 // Force refresh of theme styles

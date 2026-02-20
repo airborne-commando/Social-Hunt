@@ -60,15 +60,37 @@
         </div>
 
         <script>
-            // Apply theme
-            fetch("/sh-api/public/theme")
-                .then((res) => res.json())
-                .then((j) => {
-                    if (j.theme && j.theme !== "default") {
-                        document.body.setAttribute("data-theme", j.theme);
-                    }
-                })
-                .catch(() => {});
+            // Ensure clean theme state on login page
+            function loadTheme() {
+                // Clear any existing theme attributes
+                document.body.removeAttribute("data-theme");
+                document.body.className = document.body.className
+                    .split(" ")
+                    .filter((cls) => !cls.startsWith("theme-"))
+                    .join(" ");
+
+                // Apply server theme
+                fetch("/sh-api/public/theme")
+                    .then((res) => res.json())
+                    .then((j) => {
+                        if (j.theme && j.theme !== "default") {
+                            document.body.setAttribute("data-theme", j.theme);
+                        }
+                        // Force style refresh
+                        document.body.offsetHeight;
+                    })
+                    .catch((error) => {
+                        console.warn(
+                            "Theme loading failed, using default:",
+                            error,
+                        );
+                        // Ensure default theme is properly applied
+                        document.body.removeAttribute("data-theme");
+                    });
+            }
+
+            // Load theme immediately
+            loadTheme();
 
             const KEY = "socialhunt_token";
 
@@ -114,4 +136,3 @@
         </script>
     </body>
 </html>
-
