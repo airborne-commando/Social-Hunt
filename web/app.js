@@ -356,6 +356,45 @@ function initDashboardView() {
   if (document.querySelector(".tip-item")) {
     initializeDashboardTips();
   }
+
+  // Initialize system status indicators
+  setTimeout(() => {
+    initializeSystemStatus();
+  }, 150);
+}
+
+function initializeSystemStatus() {
+  // Server is always reachable if the page loaded
+  const serverIndicator = document.getElementById("serverStatus");
+  if (serverIndicator) {
+    serverIndicator.className = "status-indicator status-good";
+  }
+
+  // Authentication — green if a token is stored, yellow if not
+  const tokenIndicator = document.getElementById("dashTokenStatus");
+  if (tokenIndicator) {
+    if (getToken()) {
+      tokenIndicator.className = "status-indicator status-good";
+    } else {
+      tokenIndicator.className = "status-indicator status-warning";
+    }
+  }
+
+  // Providers — green if at least one provider loaded, yellow/red otherwise
+  const providersIndicator = document.getElementById("providersStatus");
+  if (providersIndicator) {
+    fetchProviders()
+      .then((providers) => {
+        if (providers && providers.length > 0) {
+          providersIndicator.className = "status-indicator status-good";
+        } else {
+          providersIndicator.className = "status-indicator status-warning";
+        }
+      })
+      .catch(() => {
+        providersIndicator.className = "status-indicator status-error";
+      });
+  }
 }
 
 // Dashboard-specific tip initialization
