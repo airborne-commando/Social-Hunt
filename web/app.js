@@ -389,30 +389,7 @@ function initializeDashboardTips() {
       }
     } catch (error) {
       // Silently handle tip display errors
-    }</end_text>
-
-<old_text line=452>
-// Dashboard stats initialization using main app functions
-function initializeDashboardStats() {
-  console.log("=== DASHBOARD STATS DEBUG ===");
-  console.log("Checking if stat elements exist...");
-
-  const totalEl = document.getElementById("totalSearches");
-  const reverseEl = document.getElementById("reverseSearches");
-  const breachEl = document.getElementById("breachSearches");
-  const providersEl = document.getElementById("activeProviders");
-
-  console.log("Elements found:", {
-    totalSearches: !!totalEl,
-    reverseSearches: !!reverseEl,
-    breachSearches: !!breachEl,
-    activeProviders: !!providersEl,
-  });
-
-  if (!totalEl || !reverseEl || !breachEl || !providersEl) {
-    console.error("Some stat elements are missing from DOM!");
-    return;
-  }
+    }
   }
 
   // Setup navigation buttons
@@ -578,7 +555,40 @@ function setupDashboardRefresh() {
   }
 }
 
+// Helper function to update stat values with animation
+function updateDashboardStatValue(elementId, value) {
+  const element = document.getElementById(elementId);
+  if (!element) return;
 
+  // Animate the value change
+  element.style.transform = "scale(1.1)";
+  element.style.color = "var(--accent)";
+
+  setTimeout(() => {
+    element.textContent = value.toString();
+    element.style.transform = "scale(1)";
+    element.style.color = "";
+  }, 150);
+}
+
+// Setup refresh controls for dashboard
+function setupDashboardRefresh() {
+  const refreshBtn = document.getElementById("refreshStats");
+
+  if (refreshBtn && !refreshBtn.hasAttribute("data-initialized")) {
+    refreshBtn.setAttribute("data-initialized", "true");
+    refreshBtn.addEventListener("click", () => {
+      refreshBtn.disabled = true;
+      refreshBtn.innerHTML = '<span class="spinner"></span> Refreshing...';
+
+      setTimeout(() => {
+        initializeDashboardStats();
+        refreshBtn.disabled = false;
+        refreshBtn.innerHTML = '<span class="btn-icon">🔄</span> Refresh';
+      }, 1000);
+    });
+  }
+}
 
 // ----------------------
 // Search
