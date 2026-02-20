@@ -62,17 +62,24 @@ def load_plugin_providers() -> Dict[str, BaseProvider]:
     pkg = importlib.import_module("social_hunt.providers")
 
     for m in pkgutil.iter_modules(pkg.__path__, pkg.__name__ + "."):
-        mod = importlib.import_module(m.name)
+        try:
+            mod = importlib.import_module(m.name)
+        except Exception as e:
+            print(f"[WARN] Skipping provider module {m.name!r}: {e}")
+            continue
 
-        if hasattr(mod, "get_providers"):
-            for p in mod.get_providers():
-                if isinstance(p, BaseProvider):
-                    providers[p.name] = p
+        try:
+            if hasattr(mod, "get_providers"):
+                for p in mod.get_providers():
+                    if isinstance(p, BaseProvider):
+                        providers[p.name] = p
 
-        if hasattr(mod, "PROVIDERS"):
-            for p in getattr(mod, "PROVIDERS"):
-                if isinstance(p, BaseProvider):
-                    providers[p.name] = p
+            if hasattr(mod, "PROVIDERS"):
+                for p in getattr(mod, "PROVIDERS"):
+                    if isinstance(p, BaseProvider):
+                        providers[p.name] = p
+        except Exception as e:
+            print(f"[WARN] Skipping provider module {m.name!r} (registration error): {e}")
 
     return providers
 

@@ -11,7 +11,7 @@ from .addons_base import BaseAddon
 from .addons_registry import build_addon_registry, load_enabled_addons
 from .providers_base import BaseProvider
 from .rate_limit import HostRateLimiter
-from .types import ProviderResult
+from .types import ProviderResult, ResultStatus
 from .ua import UA_PROFILES, merge_headers
 
 
@@ -75,7 +75,26 @@ class SocialHuntEngine:
                     use_client = client_proxy
 
                 async with sem:
-                    res = await prov.check(username, use_client, headers)
+                    provider_timeout = getattr(prov, "timeout", 15) + 5
+                    try:
+                        res = await asyncio.wait_for(
+                            prov.check(username, use_client, headers),
+                            timeout=provider_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        from datetime import datetime, timezone
+                        res = ProviderResult(
+                            provider=prov.name,
+                            username=username,
+                            url=prov.build_url(username),
+                            status=ResultStatus.ERROR,
+                            http_status=None,
+                            elapsed_ms=provider_timeout * 1000,
+                            evidence={},
+                            profile={},
+                            error=f"Timed out after {provider_timeout}s",
+                            timestamp_iso=datetime.now(timezone.utc).isoformat(),
+                        )
 
                     # Demo mode censorship
                     from .demo import censor_value, is_demo_mode
